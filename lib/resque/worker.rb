@@ -145,6 +145,8 @@ module Resque
 
           done_working
           @child = nil
+
+          run_hook :after_perform, self
         else
           break if interval.zero?
           log! "Sleeping for #{interval} seconds"

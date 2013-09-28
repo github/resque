@@ -111,6 +111,17 @@ module Resque
     @after_fork = after_fork
   end
 
+  # Runs after a job is performed
+  def after_perform(&block)
+    block ? (@after_perform = block) : @after_perform
+  end
+
+  # Set the after_perform proc.
+  def after_perform=(after_perform)
+    @after_perform = after_perform
+  end
+
+
   def to_s
     "Resque Client connected to #{redis_id}"
   end
