@@ -88,6 +88,7 @@ module Resque
     # in alphabetical order. Queues can be dynamically added or
     # removed without needing to restart workers using this method.
     def initialize(*queues)
+      @current_job = nil
       @queues = queues.map { |queue| queue.to_s.strip }
       validate_queues
     end
@@ -171,6 +172,7 @@ module Resque
     # Processes a given job in the child.
     def perform(job)
       begin
+        @current_job = job
         run_hook :after_fork, job
         job.perform
       rescue Object => e
@@ -184,6 +186,7 @@ module Resque
       else
         log "done: #{job.inspect}"
       ensure
+        @current_job = nil
         yield job if block_given?
       end
     end
@@ -307,6 +310,8 @@ module Resque
           log! "Child #{@child} not found, restarting."
           shutdown
         end
+      elsif @cant_fork && @current_job
+        raise Resque::DirtyExit, "Worker killed while processing job"
       end
     end
 
