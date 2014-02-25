@@ -19,6 +19,10 @@ module Resque
     # abort the job.
     DontPerform = Class.new(StandardError)
 
+    # Raise Rescue::Job::DontPerform from a before_reserve hook to
+    # stop the worker from taking a job from the queue.
+    DontReserve = Class.new(StandardError)
+
     # The worker object which is currently processing this job.
     attr_accessor :worker
 
@@ -94,8 +98,16 @@ module Resque
     # Given a string queue name, returns an instance of Resque::Job
     # if any jobs are available. If not, returns nil.
     def self.reserve(queue)
+      run_before_reserve_hook(queue)
       return unless payload = Resque.pop(queue)
       new(queue, payload)
+    rescue DontReserve
+      return false
+    end
+
+    # Run the before_reserve hook if it's set.
+    def self.run_before_reserve_hook(queue)
+      Resque.before_reserve && Resque.before_reserve.call(queue)
     end
 
     # Attempts to perform the work represented by this job instance.
@@ -210,14 +222,13 @@ module Resque
       @after_hooks ||= Plugin.after_hooks(payload_class)
     end
 
-    def failure_hooks 
+    def failure_hooks
       @failure_hooks ||= Plugin.failure_hooks(payload_class)
     end
-    
+
     def run_failure_hooks(exception)
       job_args = args || []
       failure_hooks.each { |hook| payload_class.send(hook, exception, *job_args) }
     end
-
   end
 end

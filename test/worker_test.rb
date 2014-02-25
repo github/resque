@@ -7,6 +7,7 @@ context "Resque::Worker" do
     Resque.before_first_fork = nil
     Resque.before_fork = nil
     Resque.after_fork = nil
+    Resque.before_reserve = nil
 
     @worker = Resque::Worker.new(:jobs)
     Resque::Job.create(:jobs, SomeJob, 20, '/tmp')
@@ -43,7 +44,7 @@ context "Resque::Worker" do
     def self.on_failure_record_failure(exception, *job_args)
       @@exception = exception
     end
-    
+
     def self.exception
       @@exception
     end
@@ -382,7 +383,7 @@ context "Resque::Worker" do
   test "returns PID of running process" do
     assert_equal @worker.to_s.split(":")[1].to_i, @worker.pid
   end
-  
+
   test "requeue failed queue" do
     queue = 'good_job'
     Resque::Failure.create(:exception => Exception.new, :worker => Resque::Worker.new(queue), :queue => queue, :payload => {'class' => 'GoodJob'})
@@ -401,5 +402,14 @@ context "Resque::Worker" do
     Resque::Failure.remove_queue(queue)
     assert_equal queue2, Resque::Failure.all(0)['queue']
     assert_equal 1, Resque::Failure.count
+  end
+
+  test "before_reserve hook can stop a worker from pulling from queue" do
+    Resque.before_reserve do |queue|
+      raise Resque::Job::DontReserve if queue == "jobs"
+    end
+    worker = Resque::Worker.new(:jobs)
+    worker.work(0)
+    assert_equal 1, Resque.size(:jobs)
   end
 end
