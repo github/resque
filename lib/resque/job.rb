@@ -19,7 +19,7 @@ module Resque
     # abort the job.
     DontPerform = Class.new(StandardError)
 
-    # Raise Rescue::Job::DontReserve from a before_reserve hook to
+    # Raise Resque::Job::DontReserve from a before_reserve hook to
     # stop the worker from taking a job from the queue.
     DontReserve = Class.new(StandardError)
 
