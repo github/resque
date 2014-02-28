@@ -121,6 +121,15 @@ module Resque
     @after_perform = after_perform
   end
 
+  # Runs before a worker reserves a job from a queue
+  def before_reserve(&block)
+    block ? (@before_reserve = block) : @before_reserve
+  end
+
+  # Set the before_reserve proc.
+  def before_reserve=(before_reserve)
+    @before_reserve = before_reserve
+  end
 
   def to_s
     "Resque Client connected to #{redis_id}"
