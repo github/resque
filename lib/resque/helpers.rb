@@ -14,7 +14,8 @@ module Resque
 
       def initialize(object, message, backtrace)
         @original_object = object
-        super(message, backtrace)
+        set_backtrace(backtrace)
+        super(message)
       end
     end
 
