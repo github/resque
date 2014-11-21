@@ -1,3 +1,5 @@
+require "socket"
+
 module Resque
   # A Resque Worker processes jobs. On platforms that support fork(2),
   # the worker will fork off a child to process each job. This ensures
@@ -481,9 +483,9 @@ module Resque
     end
     alias_method :id, :to_s
 
-    # chomp'd hostname of this machine
+    # Hostname of this machine
     def hostname
-      @hostname ||= `hostname`.chomp
+      @hostname ||= Socket.gethostname
     end
 
     # Returns Integer PID of running worker
