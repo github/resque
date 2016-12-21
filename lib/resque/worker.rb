@@ -244,7 +244,6 @@ module Resque
     def startup
       enable_gc_optimizations
       register_signal_handlers
-      prune_dead_workers
       run_hook :before_first_fork, self
       register_worker
 
