@@ -350,7 +350,7 @@ module Resque
       all_workers = Worker.all
       known_workers = worker_pids unless all_workers.empty?
       all_workers.each do |worker|
-        host, pid, queues = worker.id.split(':')
+        host, pid = worker.id.split(':')
         next unless host == hostname
         next if known_workers.include?(pid)
         log! "Pruning dead worker: #{worker}"
@@ -363,6 +363,7 @@ module Resque
     def register_worker
       redis.sadd(:workers, self)
       started!
+      redis.set("worker:#{self}:queues", @queues.join(","))
     end
 
     # Runs a named hook, passing along any arguments.
@@ -390,6 +391,7 @@ module Resque
       redis.srem(:workers, self)
       redis.del("worker:#{self}")
       redis.del("worker:#{self}:started")
+      redis.del("worker:#{self}:queues")
 
       Stat.clear("processed:#{self}")
       Stat.clear("failed:#{self}")
@@ -478,7 +480,7 @@ module Resque
     # The string representation is the same as the id for this worker
     # instance. Can be used with `Worker.find`.
     def to_s
-      @to_s ||= "#{hostname}:#{Process.pid}:#{@queues.join(',')}"
+      @to_s ||= "#{hostname}:#{Process.pid}"
     end
     alias_method :id, :to_s
 
