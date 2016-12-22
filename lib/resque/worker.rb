@@ -394,9 +394,6 @@ module Resque
         redis.del("worker:#{self}")
         redis.del("worker:#{self}:queues")
       end
-
-      Stat.clear("processed:#{self}")
-      Stat.clear("failed:#{self}")
     end
 
     # Given a job, tells Redis we're working on it. Useful for seeing
@@ -416,26 +413,14 @@ module Resque
       redis.del("worker:#{self}")
     end
 
-    # How many jobs has this worker processed? Returns an int.
-    def processed
-      Stat["processed:#{self}"]
-    end
-
     # Tell Redis we've processed a job.
     def processed!
       Stat << "processed"
-      Stat << "processed:#{self}"
-    end
-
-    # How many failed jobs has this worker seen? Returns an int.
-    def failed
-      Stat["failed:#{self}"]
     end
 
     # Tells Redis we've failed a job.
     def failed!
       Stat << "failed"
-      Stat << "failed:#{self}"
     end
 
     # Returns a hash explaining the Job we're currently processing, if any.
