@@ -361,8 +361,10 @@ module Resque
     # Registers ourself as a worker. Useful when entering the worker
     # lifecycle on startup.
     def register_worker
-      redis.sadd(:workers, self)
-      redis.set("worker:#{self}:queues", @queues.join(","))
+      redis.pipelined do
+        redis.sadd(:workers, self)
+        redis.set("worker:#{self}:queues", @queues.join(","))
+      end
     end
 
     # Runs a named hook, passing along any arguments.
@@ -387,9 +389,11 @@ module Resque
         job.fail(DirtyExit.new)
       end
 
-      redis.srem(:workers, self)
-      redis.del("worker:#{self}")
-      redis.del("worker:#{self}:queues")
+      redis.pipelined do
+        redis.srem(:workers, self)
+        redis.del("worker:#{self}")
+        redis.del("worker:#{self}:queues")
+      end
 
       Stat.clear("processed:#{self}")
       Stat.clear("failed:#{self}")
