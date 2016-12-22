@@ -186,7 +186,7 @@ module Resque
         rescue Object => e
           log "Received exception when reporting failure: #{e.inspect}"
         end
-        failed!
+        Stat << "failed"
       else
         log "done: #{job.inspect}"
       ensure
@@ -409,18 +409,10 @@ module Resque
     # Called when we are done working - clears our `working_on` state
     # and tells Redis we processed a job.
     def done_working
-      processed!
-      redis.del("worker:#{self}")
-    end
-
-    # Tell Redis we've processed a job.
-    def processed!
-      Stat << "processed"
-    end
-
-    # Tells Redis we've failed a job.
-    def failed!
-      Stat << "failed"
+      redis.pipelined do
+        Stat << "processed"
+        redis.del("worker:#{self}")
+      end
     end
 
     # Returns a hash explaining the Job we're currently processing, if any.
