@@ -362,7 +362,6 @@ module Resque
     # lifecycle on startup.
     def register_worker
       redis.sadd(:workers, self)
-      started!
       redis.set("worker:#{self}:queues", @queues.join(","))
     end
 
@@ -390,7 +389,6 @@ module Resque
 
       redis.srem(:workers, self)
       redis.del("worker:#{self}")
-      redis.del("worker:#{self}:started")
       redis.del("worker:#{self}:queues")
 
       Stat.clear("processed:#{self}")
@@ -434,16 +432,6 @@ module Resque
     def failed!
       Stat << "failed"
       Stat << "failed:#{self}"
-    end
-
-    # What time did this worker start? Returns an instance of `Time`
-    def started
-      redis.get "worker:#{self}:started"
-    end
-
-    # Tell Redis we've started
-    def started!
-      redis.set("worker:#{self}:started", Time.now.to_s)
     end
 
     # Returns a hash explaining the Job we're currently processing, if any.
