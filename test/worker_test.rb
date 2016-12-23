@@ -263,7 +263,7 @@ context "Resque::Worker" do
     end
   end
 
-  test "cleans up dead worker info on start (crash recovery)" do
+  test "cleans up dead worker when requested" do
     # first we fake out two dead workers
     workerA = Resque::Worker.new(:jobs)
     workerA.instance_variable_set(:@to_s, "#{`hostname`.chomp}:1:jobs")
@@ -276,6 +276,7 @@ context "Resque::Worker" do
     assert_equal 2, Resque.workers.size
 
     # then we prune them
+    @worker.prune_dead_workers
     @worker.work(0) do
       assert_equal 1, Resque.workers.size
     end
