@@ -332,8 +332,8 @@ module Resque
   # precise name of a queue: case matters.
   #
   # This method is considered part of the `stable` API.
-  def reserve(queue)
-    Job.reserve(queue)
+  def reserve(*queues)
+    Job.reserve(*queues)
   end
 
   # Validates if the given klass could be a valid Resque job
