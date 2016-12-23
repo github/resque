@@ -95,10 +95,15 @@ module Resque
       destroyed
     end
 
-    # Given a string queue name, returns an instance of Resque::Job
-    # if any jobs are available. If not, returns nil.
-    def self.reserve(*queues)
-      valid_queues = queues.select do |queue|
+    # Attempt to reserve a Resque::Job.
+    #
+    # queues  - An Array of String queue names to check
+    # timeout - Integer number of seconds to block when retrieving jobs.
+    #           Defaults to 1.
+    #
+    # Returns a Resque::Job or falsey.
+    def self.reserve(queues, timeout=1)
+      valid_queues = Array(queues).select do |queue|
         begin
           run_before_reserve_hook(queue)
           true
@@ -107,7 +112,7 @@ module Resque
         end
       end
       return if valid_queues.empty?
-      queue, payload = Resque.pop(*valid_queues)
+      queue, payload = Resque.pop(valid_queues, timeout)
       payload && new(queue, payload)
     end
 
