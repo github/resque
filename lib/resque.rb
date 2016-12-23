@@ -173,9 +173,13 @@ module Resque
 
   # Pops a job off a queue. Queue name should be a string.
   #
-  # Returns a Ruby object.
-  def pop(queue)
-    decode redis.lpop("queue:#{queue}")
+  # Returns an array of [queue_name, decoded_payload], or falsey.
+  def pop(*queues)
+    queue_names = queues.map { |queue| "queue:#{queue}" }
+    # TODO thread interval from the worker
+    interval = 1
+    queue, payload = redis.blpop(*queue_names, interval)
+    queue && [queue.sub("#{redis.namespace}:queue:", ""), decode(payload)]
   end
 
   # Returns an integer representing the size of a queue.

@@ -163,20 +163,20 @@ context "Resque" do
   end
 
   test "can pull items off a queue" do
-    assert_equal({ 'name' => 'chris' }, Resque.pop(:people))
-    assert_equal({ 'name' => 'bob' }, Resque.pop(:people))
-    assert_equal({ 'name' => 'mark' }, Resque.pop(:people))
+    assert_equal(["people", { 'name' => 'chris' }], Resque.pop(:people))
+    assert_equal(["people", { 'name' => 'bob' }], Resque.pop(:people))
+    assert_equal(["people", { 'name' => 'mark' }], Resque.pop(:people))
     assert_equal nil, Resque.pop(:people)
   end
 
   test "knows how big a queue is" do
     assert_equal 3, Resque.size(:people)
 
-    assert_equal({ 'name' => 'chris' }, Resque.pop(:people))
+    assert_equal(["people", { 'name' => 'chris' }], Resque.pop(:people))
     assert_equal 2, Resque.size(:people)
 
-    assert_equal({ 'name' => 'bob' }, Resque.pop(:people))
-    assert_equal({ 'name' => 'mark' }, Resque.pop(:people))
+    assert_equal(["people", { 'name' => 'bob' }], Resque.pop(:people))
+    assert_equal(["people", { 'name' => 'mark' }], Resque.pop(:people))
     assert_equal 0, Resque.size(:people)
   end
 

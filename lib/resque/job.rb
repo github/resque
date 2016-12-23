@@ -97,12 +97,18 @@ module Resque
 
     # Given a string queue name, returns an instance of Resque::Job
     # if any jobs are available. If not, returns nil.
-    def self.reserve(queue)
-      run_before_reserve_hook(queue)
-      return unless payload = Resque.pop(queue)
-      new(queue, payload)
-    rescue DontReserve
-      return false
+    def self.reserve(*queues)
+      valid_queues = queues.select do |queue|
+        begin
+          run_before_reserve_hook(queue)
+          true
+        rescue DontReserve
+          false
+        end
+      end
+      return if valid_queues.empty?
+      queue, payload = Resque.pop(*valid_queues)
+      payload && new(queue, payload)
     end
 
     # Run the before_reserve hook if it's set.
