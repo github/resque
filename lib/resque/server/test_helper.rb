@@ -3,7 +3,7 @@ require 'resque/server'
 
 module Resque
   module TestHelper
-    class ActiveSupport::TestCase
+    class Test::Unit::TestCase
       include Rack::Test::Methods
       def app
         Resque::Server.new
