@@ -317,6 +317,7 @@ context "Resque::Worker" do
   end
 
   test "worker_pids returns pids" do
+    @worker.work(0) # to set a findable procline
     known_workers = @worker.worker_pids
     assert !known_workers.empty?
   end
