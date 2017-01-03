@@ -129,7 +129,11 @@ module Resque
       loop do
         break if shutdown?
 
-        if not paused? and job = reserve(interval)
+        if !paused
+          procline "Waiting for #{@queues.join(',')}"
+        end
+
+        if !paused? && job = reserve(interval)
           log "got: #{job.inspect}"
           job.worker = self
           run_hook :before_fork, job
@@ -151,8 +155,8 @@ module Resque
           run_hook :after_perform, self
         else
           break if interval.zero? # for testing
-          procline paused? ? "Paused" : "Waiting for #{@queues.join(',')}"
           if paused?
+            procline "Paused"
             sleep interval
           end
         end
