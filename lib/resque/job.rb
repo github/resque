@@ -99,10 +99,10 @@ module Resque
     #
     # queues  - An Array of String queue names to check
     # timeout - Integer number of seconds to block when retrieving jobs.
-    #           Defaults to 1.
+    #           Defaults to 5.
     #
     # Returns a Resque::Job or falsey.
-    def self.reserve(queues, timeout=1)
+    def self.reserve(queues, timeout=5)
       valid_queues = Array(queues).select do |queue|
         begin
           run_before_reserve_hook(queue)

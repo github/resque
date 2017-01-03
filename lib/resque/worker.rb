@@ -200,8 +200,8 @@ module Resque
     # nil if no job can be found.
     #
     # timeout - an Integer timeout in seconds to use for the blocking pop.
-    #           Defaults to 1.
-    def reserve(timeout=1)
+    #           Defaults to 5.
+    def reserve(timeout=5)
       if job = Resque.reserve(queues, timeout)
         log! "Found job on #{job.queue}"
         return job

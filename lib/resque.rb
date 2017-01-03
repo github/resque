@@ -337,12 +337,12 @@ module Resque
   #
   # queues  - An Array of String queue names to check
   # timeout - Integer number of seconds to block when retrieving jobs.
-  #           Defaults to 1.
+  #           Defaults to 5.
   #
   # Returns a Resque::Job or falsey.
   #
   # This method is considered part of the `stable` API.
-  def reserve(queues, timeout=1)
+  def reserve(queues, timeout=5)
     Job.reserve(Array(queues), timeout)
   end
 
