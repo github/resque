@@ -129,7 +129,7 @@ module Resque
       loop do
         break if shutdown?
 
-        if !paused
+        if !paused?
           procline "Waiting for #{@queues.join(',')}"
         end
 
