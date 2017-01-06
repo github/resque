@@ -115,21 +115,25 @@ module Resque
     # 2. Work loop: Jobs are pulled from a queue and processed.
     # 3. Teardown:  This worker is unregistered.
     #
-    # Can be passed a float representing the polling frequency.
+    # Can be passed an integer representing the polling frequency.
     # The default is 5 seconds, but for a semi-active site you may
     # want to use a smaller value.
     #
     # Also accepts a block which will be passed the job as soon as it
     # has completed processing. Useful for testing.
-    def work(interval = 5.0, &block)
-      interval = Float(interval)
+    def work(interval = 5, &block)
+      interval = Integer(interval)
       $0 = "resque: Starting"
       startup
 
       loop do
         break if shutdown?
 
-        if not paused? and job = reserve
+        if !paused?
+          procline "Waiting for #{@queues.join(',')}"
+        end
+
+        if !paused? && job = reserve(interval)
           log "got: #{job.inspect}"
           job.worker = self
           run_hook :before_fork, job
@@ -150,10 +154,11 @@ module Resque
 
           run_hook :after_perform, self
         else
-          break if interval.zero?
-          log! "Sleeping for #{interval} seconds"
-          procline paused? ? "Paused" : "Waiting for #{@queues.join(',')}"
-          sleep interval
+          break if interval.zero? # for testing
+          if paused?
+            procline "Paused"
+            sleep interval
+          end
         end
       end
 
@@ -197,15 +202,14 @@ module Resque
 
     # Attempts to grab a job off one of the provided queues. Returns
     # nil if no job can be found.
-    def reserve
-      queues.each do |queue|
-        log! "Checking #{queue}"
-        if job = Resque.reserve(queue)
-          log! "Found job on #{queue}"
-          return job
-        end
+    #
+    # timeout - an Integer timeout in seconds to use for the blocking pop.
+    #           Defaults to 5.
+    def reserve(timeout=5)
+      if job = Resque.reserve(queues, timeout)
+        log! "Found job on #{job.queue}"
+        return job
       end
-
       nil
     rescue Exception => e
       log "Error reserving job: #{e.inspect}"

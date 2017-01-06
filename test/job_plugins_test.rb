@@ -159,25 +159,6 @@ context "Resque::Plugin ordering around_perform" do
     end
   end
 
-  class ::AroundPerformJob3
-    extend AroundPerformPlugin1
-    extend AroundPerformPlugin2
-    extend AroundPerformDoesNotYield
-    def self.perform(history)
-      history << :perform
-    end
-    def self.around_perform(history)
-      history << :around_perform
-      yield
-    end
-  end
-
-  test "the job is aborted if an around_perform hook does not yield" do
-    result = perform_job(AroundPerformJob3, history=[])
-    assert_equal false, result, "perform returned false"
-    assert_equal [:around_perform, :around_perform0], history
-  end
-
   module AroundPerformGetsJobResult
     @@result = nil
     def last_job_result

@@ -171,11 +171,19 @@ module Resque
     redis.rpush "queue:#{queue}", encode(item)
   end
 
-  # Pops a job off a queue. Queue name should be a string.
+  # Pops a job off one ore more queues.
   #
-  # Returns a Ruby object.
-  def pop(queue)
-    decode redis.lpop("queue:#{queue}")
+  # queues -  An array of String queue names.
+  # timeout - Integer number of seconds to block on BLPOP.
+  #           Defaults to 1, requires a minimum value of 1 to prevent
+  #           indeterminate blocking.
+  #
+  # Returns an array of [queue_name, decoded_payload], or falsey.
+  def pop(queues, timeout=1)
+    queue_names = Array(queues).map { |queue| "queue:#{queue}" }
+    timeout = [1, timeout].max # require nonzero, no infinite blocking
+    queue, payload = redis.blpop(*queue_names, timeout)
+    queue && [queue.sub("#{redis.namespace}:queue:", ""), decode(payload)]
   end
 
   # Returns an integer representing the size of a queue.
@@ -327,9 +335,15 @@ module Resque
   # depending on whether a job can be obtained. You should pass it the
   # precise name of a queue: case matters.
   #
+  # queues  - An Array of String queue names to check
+  # timeout - Integer number of seconds to block when retrieving jobs.
+  #           Defaults to 5.
+  #
+  # Returns a Resque::Job or falsey.
+  #
   # This method is considered part of the `stable` API.
-  def reserve(queue)
-    Job.reserve(queue)
+  def reserve(queues, timeout=5)
+    Job.reserve(Array(queues), timeout)
   end
 
   # Validates if the given klass could be a valid Resque job
