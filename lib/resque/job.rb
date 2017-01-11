@@ -103,7 +103,6 @@ module Resque
     #
     # Returns a Resque::Job or falsey.
     def self.reserve(queues, timeout=5)
-      queues = reservable_queues(queues)
       return if queues.empty?
       queue, payload = Resque.pop(queues, timeout)
       payload && new(queue, payload)

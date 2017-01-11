@@ -203,10 +203,20 @@ module Resque
     # Attempts to grab a job off one of the provided queues. Returns
     # nil if no job can be found.
     #
-    # timeout - an Integer timeout in seconds to use for the blocking pop.
-    #           Defaults to 5.
+    # The timeout defines how long to wait for a blocking pop, if any queues are
+    # available to check for jobs, or how long to sleep if no queues are
+    # available. Queues may not be available because resque hasn't created or
+    # tracked any queues yet, or because no queues are passing their
+    # before_reserve hooks.
+    #
+    # timeout - an Integer timeout in seconds. Defaults to 5.
+    #
+    # Returns a Job or nil.
     def reserve(timeout=5)
-      if job = Resque.reserve(queues, timeout)
+      available_queues = Job.reservable_queues(queues)
+      if available_queues.empty?
+        sleep timeout # prevent busy-wait.
+      elsif job = Job.reserve(queues, timeout)
         log! "Found job on #{job.queue}"
         return job
       end
