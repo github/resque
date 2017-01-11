@@ -103,7 +103,18 @@ module Resque
     #
     # Returns a Resque::Job or falsey.
     def self.reserve(queues, timeout=5)
-      valid_queues = Array(queues).select do |queue|
+      queues = reservable_queues(queues)
+      return if queues.empty?
+      queue, payload = Resque.pop(queues, timeout)
+      payload && new(queue, payload)
+    end
+
+    # Run before_reserve hooks on the given list of queues to determine which
+    # are available for reserving jobs.
+    #
+    # Returns an Array of queue names, which may be empty.
+    def self.reservable_queues(queues)
+      Array(queues).select do |queue|
         begin
           run_before_reserve_hook(queue)
           true
@@ -111,9 +122,6 @@ module Resque
           false
         end
       end
-      return if valid_queues.empty?
-      queue, payload = Resque.pop(valid_queues, timeout)
-      payload && new(queue, payload)
     end
 
     # Run the before_reserve hook if it's set.
