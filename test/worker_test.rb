@@ -162,7 +162,7 @@ context "Resque::Worker" do
   end
 
   test "has a unique id" do
-    assert_equal "#{`hostname`.chomp}:#{$$}:", @worker.to_s
+    assert_equal "#{`hostname`.chomp}:#{$$}:-", @worker.to_s
   end
 
   test "complains if no queues are given" do
