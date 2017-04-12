@@ -375,7 +375,7 @@ context "Resque::Worker" do
     Resque.before_reserve do |queue|
       raise Resque::Job::DontReserve if queue == "jobs"
     end
-    worker = Resque::Worker.new(:jobs)
+    worker = Resque::Worker.new(:jobs, :more_jobs)
     worker.work(0)
     assert_equal 1, Resque.size(:jobs)
   end
