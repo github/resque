@@ -216,7 +216,7 @@ module Resque
       available_queues = Job.reservable_queues(queues)
       if available_queues.empty?
         sleep timeout # prevent busy-wait.
-      elsif job = Job.reserve(queues, timeout)
+      elsif job = Job.reserve(available_queues, timeout)
         log! "Found job on #{job.queue}"
         return job
       end
