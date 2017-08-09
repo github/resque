@@ -185,7 +185,7 @@ module Resque
     queue_names = Array(queues).map { |queue| "queue:#{queue}" }
     timeout = [1, timeout].max # require nonzero, no infinite blocking
     queue, payload = redis.blpop(*queue_names, timeout)
-    queue && [queue.sub("#{redis.namespace}:queue:", ""), decode(payload)]
+    queue && [queue.sub("queue:", ""), decode(payload)]
   end
 
   # Returns an integer representing the size of a queue.
