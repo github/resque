@@ -246,7 +246,16 @@ module Resque
 
     def run_failure_hooks(exception)
       job_args = args || []
-      failure_hooks.each { |hook| payload_class.send(hook, exception, *job_args) }
+      failure_hooks.each do |hook|
+        begin
+          payload_class.send(hook, exception, *job_args)
+        rescue NameError
+          # it's possible for cleanup (from prune_dead_workers) to refer to job
+          # classes that no longer exist. If that happens, don't worry about the
+          # failure hooks.
+          break
+        end
+      end
     end
   end
 end
