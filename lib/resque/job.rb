@@ -242,6 +242,9 @@ module Resque
 
     def failure_hooks
       @failure_hooks ||= Plugin.failure_hooks(payload_class)
+    rescue NameError
+      # if the payload class doesn't exist, there aro hooks
+      []
     end
 
     def run_failure_hooks(exception)
