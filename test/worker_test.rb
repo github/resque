@@ -535,6 +535,23 @@ describe "Resque::Worker" do
     assert_equal 2, @worker.failed
   end
 
+  it "does not track per-worker stats when turned off" do
+    Resque::Worker.per_worker_stats = false
+    Resque::Job.create(:jobs, BadJob)
+    Resque::Job.create(:jobs, BadJob)
+
+    3.times do
+      job = @worker.reserve
+      @worker.process job
+    end
+    assert_equal 0, @worker.processed
+    assert_equal 0, @worker.failed
+    assert_equal 3, Resque::Stat["processed"]
+    assert_equal 2, Resque::Stat["failed"]
+
+    Resque::Worker.per_worker_stats = true
+  end
+
   it "stats are erased when the worker goes away" do
     @worker.work(0)
     assert_equal 0, @worker.processed
@@ -545,9 +562,21 @@ describe "Resque::Worker" do
     time = Time.now
     without_forking do
       @worker.extend(AssertInWorkBlock).work(0) do
-        assert Time.parse(@worker.started) - time < 0.1
+        assert @worker.started
+        difference = Time.parse(@worker.started) - time
+        assert difference < 0.1
       end
     end
+  end
+
+  it "doesn't track start if disabled" do
+    Resque::Worker.track_starts = false
+      without_forking do
+        @worker.extend(AssertInWorkBlock).work(0) do
+          assert_nil @worker.started
+        end
+      end
+    Resque::Worker.track_starts = true
   end
 
   it "knows whether it exists or not" do

@@ -211,6 +211,12 @@ module Resque
     end
 
     class Workers
+      class << self
+        attr_accessor :track_starts
+      end
+
+      self.track_starts = true
+
       def initialize(redis)
         @redis = redis
       end
@@ -243,14 +249,18 @@ module Resque
       end
 
       def worker_started(worker)
-        @redis.set(redis_key_for_worker_start_time(worker), Time.now.to_s)
+        if self.class.track_starts
+          @redis.set(redis_key_for_worker_start_time(worker), Time.now.to_s)
+        end
       end
 
       def unregister_worker(worker, &block)
         @redis.pipelined do
           @redis.srem(:workers, worker)
           @redis.del(redis_key_for_worker(worker))
-          @redis.del(redis_key_for_worker_start_time(worker))
+          if self.class.track_starts
+            @redis.del(redis_key_for_worker_start_time(worker))
+          end
           @redis.hdel(HEARTBEAT_KEY, worker.to_s)
 
           block.call

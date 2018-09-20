@@ -719,10 +719,29 @@ module Resque
       Stat["processed:#{self}"]
     end
 
+    def self.per_worker_stats
+      return @per_worker_stats if defined?(@per_worker_stats)
+      @per_worker_stats = true
+    end
+
+    def self.per_worker_stats=(v)
+      @per_worker_stats = v
+    end
+
+    def self.track_starts
+      DataStore::Workers.track_starts
+    end
+
+    def self.track_starts=(v)
+      DataStore::Workers.track_starts = v
+    end
+
     # Tell Redis we've processed a job.
     def processed!
       Stat << "processed"
-      Stat << "processed:#{self}"
+      if self.class.per_worker_stats
+        Stat << "processed:#{self}"
+      end
     end
 
     # How many failed jobs has this worker seen? Returns an int.
@@ -733,7 +752,9 @@ module Resque
     # Tells Redis we've failed a job.
     def failed!
       Stat << "failed"
-      Stat << "failed:#{self}"
+      if self.class.per_worker_stats
+        Stat << "failed:#{self}"
+      end
     end
 
     # What time did this worker start? Returns an instance of `Time`
