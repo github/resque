@@ -219,6 +219,24 @@ module Resque
     end
   end
 
+  attr_writer :per_worker_stats
+  def per_worker_stats
+    if defined? @per_worker_stats
+      @per_worker_stats
+    else
+      @per_worker_stats = true
+    end
+  end
+
+  attr_writer :track_starts
+  def track_starts
+    if defined? @track_starts
+      @track_starts
+    else
+      @track_starts = true
+    end
+  end
+
   # The `before_first_fork` hook will be run in the **parent** process
   # only once, before forking to run the first job. Be careful- any
   # changes you make will be permanent for the lifespan of the

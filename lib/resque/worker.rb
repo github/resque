@@ -719,27 +719,14 @@ module Resque
       Stat["processed:#{self}"]
     end
 
-    def self.per_worker_stats
-      return @per_worker_stats if defined?(@per_worker_stats)
-      @per_worker_stats = true
-    end
-
-    def self.per_worker_stats=(v)
-      @per_worker_stats = v
-    end
-
-    def self.track_starts
-      DataStore::Workers.track_starts
-    end
-
-    def self.track_starts=(v)
-      DataStore::Workers.track_starts = v
+    def per_worker_stats
+      Resque.per_worker_stats
     end
 
     # Tell Redis we've processed a job.
     def processed!
       Stat << "processed"
-      if self.class.per_worker_stats
+      if per_worker_stats
         Stat << "processed:#{self}"
       end
     end
@@ -752,7 +739,7 @@ module Resque
     # Tells Redis we've failed a job.
     def failed!
       Stat << "failed"
-      if self.class.per_worker_stats
+      if per_worker_stats
         Stat << "failed:#{self}"
       end
     end
