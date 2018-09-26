@@ -36,6 +36,7 @@ module Resque
     def_delegators :@workers, :worker_ids,
                               :workers_map,
                               :get_worker_payload,
+                              :get_worker_queues,
                               :worker_exists?,
                               :register_worker,
                               :worker_started,
@@ -231,6 +232,15 @@ module Resque
         @redis.get("worker:#{worker_id}")
       end
 
+      def get_worker_queues(worker_id)
+        raw_queues = @redis.get("worker:#{worker_id}:queues")
+        if raw_queues
+          raw_queues.split(',')
+        else
+          []
+        end
+      end
+
       def worker_exists?(worker_id)
         @redis.sismember(:workers, worker_id)
       end
@@ -238,6 +248,9 @@ module Resque
       def register_worker(worker)
         @redis.pipelined do
           @redis.sadd(:workers, worker)
+          unless queues_in_names
+            @redis.set("worker:#{worker}:queues", worker.queues.join(","))
+          end
           worker_started(worker)
         end
       end
@@ -252,6 +265,9 @@ module Resque
         @redis.pipelined do
           @redis.srem(:workers, worker)
           @redis.del(redis_key_for_worker(worker))
+          unless queues_in_names
+            @redis.del("worker:#{worker}:queues")
+          end
           if track_starts
             @redis.del(redis_key_for_worker_start_time(worker))
           end
@@ -313,6 +329,10 @@ module Resque
 
       def track_starts
         Resque.track_starts
+      end
+
+      def queues_in_names
+        Resque.queues_in_names
       end
     end
 

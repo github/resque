@@ -67,6 +67,10 @@ module Resque
     attr_writer :to_s
     attr_writer :pid
 
+    def queues_in_names
+      Resque.queues_in_names
+    end
+
     # Returns an array of all worker objects.
     def self.all
       data_store.worker_ids.map { |id| find(id, :skip_exists => true) }.compact
@@ -198,6 +202,9 @@ module Resque
     # A splat ("*") means you want every queue (in alpha order) - this
     # can be useful for dynamically adding new queues.
     def queues
+      if !queues_in_names && @queues == ["-"]
+        self.queues = data_store.get_worker_queues(self)
+      end
       if @has_dynamic_queues
         current_queues = Resque.queues
         @queues.map { |queue| glob_match(current_queues, queue) }.flatten.uniq
@@ -795,7 +802,11 @@ module Resque
     # The string representation is the same as the id for this worker
     # instance. Can be used with `Worker.find`.
     def to_s
-      @to_s ||= "#{hostname}:#{pid}:#{@queues.join(',')}"
+      @to_s ||= if queues_in_names
+                  "#{hostname}:#{pid}:#{@queues.join(',')}"
+                else
+                  "#{hostname}:#{pid}:-"
+                end
     end
     alias_method :id, :to_s
 

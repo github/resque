@@ -1331,3 +1331,31 @@ describe "Resque::Worker" do
     end
   end
 end
+
+describe "Resque::Worker with queues_in_names false" do
+  before do
+    Resque.queues_in_names = false
+    @worker = Resque::Worker.new(:jobs)
+    Resque::Job.create(:jobs, SomeJob, 20, '/tmp')
+  end
+
+  after do
+    Resque.queues_in_names = true
+  end
+
+  it "has a unique id" do
+    assert_equal "#{`hostname`.chomp}:#{$$}:-", @worker.to_s
+  end
+
+  it "loads queues from the data store" do
+    loaded_queues = nil
+    without_forking do
+      @worker.extend(AssertInWorkBlock).work(0) do
+        found_worker = Resque::Worker.find(@worker.to_s)
+        assert found_worker
+        loaded_queues = found_worker.queues
+      end
+    end
+    assert_equal ["jobs"], loaded_queues
+  end
+end
