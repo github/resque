@@ -1122,6 +1122,16 @@ describe "Resque::Worker" do
     assert_equal 1, Resque::Failure.count
   end
 
+  it "before_reserve hook can stop a worker from pulling from queue" do
+    Resque.before_reserve do |queue|
+      raise Resque::Job::DontReserve if queue == "jobs"
+    end
+    worker = Resque::Worker.new(:jobs, :more_jobs)
+    worker.work(0)
+    assert_equal 1, Resque.size(:jobs)
+    Resque.before_reserve = nil
+  end
+
   it "no reconnects to redis when not forking" do
     original_connection = Resque.redis._client.connection.instance_variable_get("@sock")
     without_forking do
