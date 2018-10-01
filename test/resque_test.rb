@@ -218,6 +218,13 @@ describe "Resque" do
       assert_equal 0, Resque.size(:people)
     end
 
+    it "can pull items off a queue" do
+      assert_equal(["people", { 'name' => 'chris' }], Resque.blocking_pop(:people, 1.0))
+      assert_equal(["people", { 'name' => 'bob' }], Resque.blocking_pop(:people, 1.0))
+      assert_equal(["people", { 'name' => 'mark' }], Resque.blocking_pop(:people, 1.0))
+      assert_nil Resque.pop(:people)
+    end
+
     it "can peek at a queue" do
       assert_equal({ 'name' => 'chris' }, Resque.peek(:people))
       assert_equal 3, Resque.size(:people)
