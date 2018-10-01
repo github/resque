@@ -314,6 +314,22 @@ module Resque
     register_hook(:after_pause, block)
   end
 
+  def before_reserve(&block)
+    block ? register_hook(:before_reserve, block) : hooks(:before_reserve)
+  end
+
+  def before_reserve=(block)
+    register_hook(:before_reserve, block)
+  end
+
+  def after_perform(&block)
+    block ? register_hook(:after_perform, block) : hooks(:after_perform)
+  end
+
+  def after_perform=(block)
+    register_hook(:after_perform, block)
+  end
+
   def to_s
     "Resque Client connected to #{redis_id}"
   end
@@ -353,6 +369,11 @@ module Resque
   # Returns a Ruby object.
   def pop(queue)
     decode(data_store.pop_from_queue(queue))
+  end
+
+  def blocking_pop(queues, interval)
+    queue, payload = data_store.blocking_pop(queues, interval)
+    queue && [queue, decode(payload)]
   end
 
   # Returns an integer representing the size of a queue.

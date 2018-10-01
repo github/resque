@@ -48,7 +48,7 @@ module Resque
     def self.decode(object)
       Resque.decode(object)
     end
-    
+
     # Given a word with dashes, returns a camel cased version of it.
     def classify(dashed_word)
       Resque.classify(dashed_word)
@@ -62,6 +62,10 @@ module Resque
     # Raise Resque::Job::DontPerform from a before_perform hook to
     # abort the job.
     DontPerform = Class.new(StandardError)
+
+    # Raise Resque::Job::DontReserve from a before_reserve hook to
+    # stop the worker from taking a job from the queue.
+    DontReserve = Class.new(StandardError)
 
     # The worker object which is currently processing this job.
     attr_accessor :worker
@@ -142,6 +146,12 @@ module Resque
     def self.reserve(queue)
       return unless payload = Resque.pop(queue)
       new(queue, payload)
+    end
+
+    def self.blocking_reserve(queues, interval)
+      return if queues.empty?
+      queue, payload = Resque.blocking_pop(queues, interval)
+      payload && new(queue, payload)
     end
 
     # Attempts to perform the work represented by this job instance.

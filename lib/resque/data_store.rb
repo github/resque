@@ -16,6 +16,7 @@ module Resque
 
     def_delegators :@queue_access, :push_to_queue,
                                    :pop_from_queue,
+                                   :blocking_pop,
                                    :queue_size,
                                    :peek_in_queue,
                                    :queue_names,
@@ -109,6 +110,13 @@ module Resque
       # Pop whatever is on queue
       def pop_from_queue(queue)
         @redis.lpop(redis_key_for_queue(queue))
+      end
+
+      def blocking_pop(queues, interval)
+        queue_names = Array(queues).map { |queue| "queue:#{queue}" }
+        timeout = [1, Integer(interval)].max # require nonzero, no infinite blocking
+        queue, payload = @redis.blpop(*queue_names, timeout)
+        queue && [queue.sub("queue:", ""), payload]
       end
 
       # Get the number of items in the queue

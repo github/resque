@@ -242,11 +242,16 @@ module Resque
       loop do
         break if shutdown?
 
-        unless work_one_job(&block)
+        if paused?
           break if interval.zero?
           log_with_severity :debug, "Sleeping for #{interval} seconds"
-          procline paused? ? "Paused" : "Waiting for #{queues.join(',')}"
+          procline "Paused"
           sleep interval
+        else
+          procline "Waiting for #{queues.join(',')}"
+          unless work_one_job(interval: interval, &block)
+            break if interval.zero?
+          end
         end
       end
 
@@ -257,9 +262,9 @@ module Resque
       unregister_worker(exception)
     end
 
-    def work_one_job(job = nil, &block)
+    def work_one_job(job = nil, interval: 5.0, &block)
       return false if paused?
-      return false unless job ||= reserve
+      return false unless job ||= blocking_reserve(interval)
 
       working_on job
       procline "Processing #{job.queue} since #{Time.now.to_i} [#{job.payload_class_name}]"
@@ -274,6 +279,7 @@ module Resque
       end
 
       done_working
+      run_hook :after_perform, job
       true
     end
 
@@ -338,6 +344,38 @@ module Resque
       log_with_severity :error, "Error reserving job: #{e.inspect}"
       log_with_severity :error, e.backtrace.join("\n")
       raise e
+    end
+
+    # Attempts to grab a job off one of the provided queues. Returns
+    # nil if no job can be found.
+    #
+    # Blocks for up to `interval` seconds.
+    def blocking_reserve(interval)
+      # TODO: why is reservable_queues on Job?
+      available_queues = reservable_queues
+      if available_queues.empty?
+        sleep interval # prevent busy-wait.
+      elsif job = Job.blocking_reserve(available_queues, interval)
+        log! "Found job on #{job.queue}"
+        return job
+      end
+
+      nil
+    rescue Exception => e
+      log_with_severity :error, "Error reserving job: #{e.inspect}"
+      log_with_severity :error, e.backtrace.join("\n")
+      raise e
+    end
+
+    def reservable_queues
+      queues.select do |queue|
+        begin
+          run_hook :before_reserve, queue
+          true
+        rescue Job::DontReserve
+          false
+        end
+      end
     end
 
     # Reconnect to Redis to avoid sharing a connection with the parent,
