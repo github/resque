@@ -1,5 +1,4 @@
-$LOAD_PATH.unshift 'lib'
-require 'resque/version'
+require File.expand_path("../lib/resque/version", __FILE__)
 
 Gem::Specification.new do |s|
   s.name              = "resque"
