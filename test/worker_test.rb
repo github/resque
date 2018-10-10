@@ -700,6 +700,71 @@ describe "Resque::Worker" do
     assert_equal [], Resque::Worker.all_workers_with_expired_heartbeats
   end
 
+  it "skips workers on other hosts" do
+    assert_equal({}, Resque::Worker.all_heartbeats)
+    now = Time.now
+
+    @worker.hostname = "bar"
+
+    workerA = Resque::Worker.new(:jobs)
+    workerA.pid = 3
+    workerA.hostname = "bar"
+    workerA.register_worker
+    workerA.heartbeat!(now)
+
+    assert_equal 1, Resque.workers.size
+    assert Resque::Worker.all_heartbeats.key?(workerA.to_s)
+
+    workerB = Resque::Worker.new(:jobs)
+    workerB.pid = 4
+    workerB.hostname = "baz"
+    workerB.register_worker
+    workerB.heartbeat!(now)
+
+    assert_equal 2, Resque.workers.size
+    assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
+
+    @worker.prune_dead_workers
+
+    assert_equal 1, Resque.workers.size
+    refute Resque::Worker.all_heartbeats.key?(workerA.to_s)
+    assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
+    assert_equal [], Resque::Worker.all_workers_with_expired_heartbeats
+  end
+
+  it "prunes regardless of role" do
+    assert_equal({}, Resque::Worker.all_heartbeats)
+    now = Time.now
+
+    @worker.hostname = "bar"
+
+    workerA = Resque::Worker.new(:jobs)
+    workerA.pid = 3
+    workerA.hostname = "bar/wat"
+    workerA.register_worker
+    workerA.heartbeat!(now)
+
+    assert_equal 1, Resque.workers.size
+    assert Resque::Worker.all_heartbeats.key?(workerA.to_s)
+
+    workerB = Resque::Worker.new(:jobs)
+    workerB.pid = 4
+    workerB.hostname = "baz"
+    workerB.register_worker
+    workerB.heartbeat!(now)
+
+    assert_equal 2, Resque.workers.size
+    assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
+
+    @worker.prune_dead_workers
+
+    assert_equal 1, Resque.workers.size
+    refute Resque::Worker.all_heartbeats.key?(workerA.to_s)
+    assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
+    assert_equal [], Resque::Worker.all_workers_with_expired_heartbeats
+  end
+
+
   it "does not prune if another worker has pruned (started pruning) recently" do
     now = Time.now
     workerA = Resque::Worker.new(:jobs)
@@ -1367,5 +1432,34 @@ describe "Resque::Worker with queues_in_names false" do
       end
     end
     assert_equal ["jobs"], loaded_queues
+  end
+
+  it "prunes dead workers with heartbeat older than prune interval" do
+    assert_equal({}, Resque::Worker.all_heartbeats)
+    now = Time.now
+
+    workerA = Resque::Worker.new(:jobs)
+    workerA.to_s = "bar:3:jobs"
+    workerA.register_worker
+    workerA.heartbeat!(now - Resque.prune_interval - 1)
+
+    assert_equal 1, Resque.workers.size
+    assert Resque::Worker.all_heartbeats.key?(workerA.to_s)
+
+    workerB = Resque::Worker.new(:jobs)
+    workerB.to_s = "foo:5:jobs"
+    workerB.register_worker
+    workerB.heartbeat!(now)
+
+    assert_equal 2, Resque.workers.size
+    assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
+    assert_equal [workerA], Resque::Worker.all_workers_with_expired_heartbeats
+
+    @worker.prune_dead_workers
+
+    assert_equal 1, Resque.workers.size
+    refute Resque::Worker.all_heartbeats.key?(workerA.to_s)
+    assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
+    assert_equal [], Resque::Worker.all_workers_with_expired_heartbeats
   end
 end

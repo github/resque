@@ -71,6 +71,10 @@ module Resque
       Resque.queues_in_names
     end
 
+    def worker_role
+      Resque.worker_role
+    end
+
     # Returns an array of all worker objects.
     def self.all
       data_store.worker_ids.map { |id| find(id, :skip_exists => true) }.compact
@@ -640,6 +644,7 @@ module Resque
       return unless data_store.acquire_pruning_dead_worker_lock(self, Resque.heartbeat_interval)
 
       all_workers = Worker.all
+      our_queues = queues.to_set
 
       unless all_workers.empty?
         known_workers = worker_pids
@@ -661,9 +666,8 @@ module Resque
           next
         end
 
-        host, pid, worker_queues_raw = worker.id.split(':')
-        worker_queues = worker_queues_raw.split(",")
-        unless @queues.include?("*") || (worker_queues.to_set == @queues.to_set)
+        worker_queues = worker.queues.to_set
+        unless worker_queues <= our_queues
           # If the worker we are trying to prune does not belong to the queues
           # we are listening to, we should not touch it.
           # Attempt to prune a worker from different queues may easily result in
@@ -672,8 +676,8 @@ module Resque
           next
         end
 
-        next unless host == hostname
-        next if known_workers.include?(pid)
+        next unless worker.hostname_without_role == hostname_without_role
+        next if known_workers.include?(worker.pid)
 
         log_with_severity :debug, "Pruning dead worker: #{worker}"
         worker.unregister_worker
@@ -850,7 +854,20 @@ module Resque
 
     # chomp'd hostname of this worker's machine
     def hostname
-      @hostname ||= Socket.gethostname
+      @hostname ||= if worker_role
+                      "#{Socket.gethostname}/#{worker_role}"
+                    else
+                      Socket.gethostname
+                    end
+    end
+
+    def role
+      return @role if defined? @role
+      @role = hostname.split("/")[1]
+    end
+
+    def hostname_without_role
+      @hostname_without_role ||= hostname.split("/").first
     end
 
     # Returns Integer PID of running worker

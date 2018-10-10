@@ -246,6 +246,8 @@ module Resque
     end
   end
 
+  attr_accessor :worker_role
+
   # The `before_first_fork` hook will be run in the **parent** process
   # only once, before forking to run the first job. Be careful- any
   # changes you make will be permanent for the lifespan of the
