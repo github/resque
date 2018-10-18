@@ -177,6 +177,24 @@ describe "Resque" do
     end
   end
 
+  it "prefixes queues" do
+    begin
+      old_prefix = Resque.queue_name_prefix
+      Resque.queue_name_prefix do |base_name|
+        "prefix_#{base_name}"
+      end
+      Resque.enqueue_to(:new_queue, SomeMethodJob, 20, '/tmp')
+
+      job = Resque.reserve(:prefix_new_queue)
+
+      assert_equal SomeMethodJob, job.payload_class
+      assert_equal 20, job.args[0]
+      assert_equal '/tmp', job.args[1]
+    ensure
+      Resque.queue_name_prefix = old_prefix
+    end
+  end
+
   it "decode bad json" do
     assert_raises Resque::Helpers::DecodeException do
       Resque.decode("{\"error\":\"Module not found \\u002\"}")

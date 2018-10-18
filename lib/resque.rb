@@ -246,6 +246,17 @@ module Resque
     end
   end
 
+  attr_writer :queue_name_prefix
+  def queue_name_prefix(&block)
+    if block
+      @queue_name_prefix = block
+    elsif defined? @queue_name_prefix
+      @queue_name_prefix
+    else
+      @queue_name_prefix = -> (x) { x }
+    end
+  end
+
   attr_accessor :worker_role
 
   # The `before_first_fork` hook will be run in the **parent** process
@@ -469,7 +480,7 @@ module Resque
     end
     return nil if before_hooks.any? { |result| result == false }
 
-    Job.create(queue, klass, *args)
+    Job.create(prefixed_queue_name(queue), klass, *args)
 
     Plugin.after_enqueue_hooks(klass).each do |hook|
       klass.send(hook, *args)
@@ -477,6 +488,11 @@ module Resque
 
     return true
   end
+
+  def prefixed_queue_name(base_name)
+    queue_name_prefix.call(base_name)
+  end
+  private :prefixed_queue_name
 
   # This method can be used to conveniently remove a job from a queue.
   # It assumes the class you're passing it is a real Ruby class (not
