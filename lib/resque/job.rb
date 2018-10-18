@@ -183,11 +183,11 @@ module Resque
           stack = around_hooks.reverse.inject(nil) do |last_hook, hook|
             if last_hook
               lambda do
-                job.send(hook, *job_args) { last_hook.call }
+                call_around_hook(job, hook: hook, args: job_args) { last_hook.call }
               end
             else
               lambda do
-                job.send(hook, *job_args) do
+                call_around_hook(job, hook: hook, args: job_args) do
                   result = job.perform(*job_args)
                   job_was_performed = true
                   result
@@ -211,6 +211,14 @@ module Resque
       rescue Object => e
         run_failure_hooks(e)
         raise e
+      end
+    end
+
+    def call_around_hook(job, hook:, args:, &block)
+      if hook.to_s.end_with?('_with_job')
+        job.send(hook, self, &block)
+      else
+        job.send(hook, *args, &block)
       end
     end
 
