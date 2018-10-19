@@ -96,7 +96,7 @@ module Resque
         # decode(encode(args)) to ensure that args are normalized in the same manner as a non-inline job
         new(:inline, {'class' => klass, 'args' => decode(encode(args))}).perform
       else
-        job = new(queue, {'class' => klass, 'args' => decode(encode(args))})
+        job = new(queue, {'class' => klass.to_s, 'args' => decode(encode(args))})
         job.queued_at = Time.now
         Resque.before_push.each do |hook|
           hook.call(job)
