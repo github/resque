@@ -96,7 +96,12 @@ module Resque
         # decode(encode(args)) to ensure that args are normalized in the same manner as a non-inline job
         new(:inline, {'class' => klass, 'args' => decode(encode(args))}).perform
       else
-        Resque.push(queue, :class => klass.to_s, :args => args)
+        job = new(queue, {'class' => klass, 'args' => decode(encode(args))})
+        job.queued_at = Time.now
+        Resque.before_push.each do |hook|
+          hook.call(job)
+        end
+        Resque.push(job.queue, job.payload)
       end
     end
 
@@ -243,6 +248,20 @@ module Resque
     # Returns an array of args represented in this job's payload.
     def args
       @payload['args']
+    end
+
+    # Returns the metadata from the job's payload
+    def metadata
+      @metadata ||= payload["meta"] || {}
+    end
+
+    # Returns the Time that this Job was queued, or nil.
+    def queued_at
+      @queued_at ||= metadata.key?("queued_at") ? Time.at(metadata["queued_at"]) : nil
+    end
+
+    def queued_at=(v)
+      metadata['queued_at'] = v.to_f
     end
 
     # Given an exception object, hands off the needed parameters to

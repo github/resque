@@ -343,6 +343,14 @@ module Resque
     register_hook(:after_perform, block)
   end
 
+  def before_push(&block)
+    block ? register_hook(:before_push, block) : hooks(:before_push)
+  end
+
+  def before_push=(block)
+    register_hook(:before_push, block)
+  end
+
   def to_s
     "Resque Client connected to #{redis_id}"
   end
