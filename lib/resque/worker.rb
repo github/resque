@@ -647,7 +647,7 @@ module Resque
       our_queues = queues.to_set
 
       unless all_workers.empty?
-        known_workers = worker_pids
+        known_workers = worker_pids.map(&:to_i)
         all_workers_with_expired_heartbeats = Worker.all_workers_with_expired_heartbeats
       end
 
