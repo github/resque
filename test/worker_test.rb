@@ -466,7 +466,7 @@ describe "Resque::Worker" do
     without_forking do
       @worker.extend(AssertInWorkBlock).work(0) do
         task = @worker.job
-        assert_equal({"args"=>[20, "/tmp"], "class"=>"SomeJob"}, task['payload'])
+        assert_equal({"args"=>[20, "/tmp"], "class"=>"SomeJob"}, task['payload'].slice("args", "class"))
         assert task['run_at']
         assert_equal 'jobs', task['queue']
       end

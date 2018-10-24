@@ -140,7 +140,13 @@ module Resque
           end
         end
       else
-        destroyed += data_store.remove_from_queue(queue, encode(:class => klass, :args => args))
+        cleaned_args = decode(encode(args))
+        data_store.everything_in_queue(queue).each do |string|
+          payload = decode(string)
+          if payload['class'] == klass && payload['args'] == cleaned_args
+            destroyed += data_store.remove_from_queue(queue,string).to_i
+          end
+        end
       end
 
       destroyed
@@ -252,7 +258,7 @@ module Resque
 
     # Returns the metadata from the job's payload
     def metadata
-      @metadata ||= payload["meta"] || {}
+      payload["meta"] ||= {}
     end
 
     # Returns the Time that this Job was queued, or nil.
