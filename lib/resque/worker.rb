@@ -355,7 +355,6 @@ module Resque
     #
     # Blocks for up to `interval` seconds.
     def blocking_reserve(interval)
-      # TODO: why is reservable_queues on Job?
       available_queues = reservable_queues
       if available_queues.empty?
         sleep interval # prevent busy-wait.
