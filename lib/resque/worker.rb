@@ -75,6 +75,10 @@ module Resque
       Resque.worker_role
     end
 
+    def blocking_reserve?
+      Resque.blocking_reserve
+    end
+
     # Returns an array of all worker objects.
     def self.all
       data_store.worker_ids.map { |id| find(id, :skip_exists => true) }.compact
@@ -268,7 +272,7 @@ module Resque
 
     def work_one_job(job = nil, interval: 5.0, &block)
       return false if paused?
-      return false unless job ||= blocking_reserve(interval)
+      return false unless job ||= reserve(interval)
 
       working_on job
       procline "Processing #{job.queue} since #{Time.now.to_i} [#{job.payload_class_name}]"
@@ -334,36 +338,29 @@ module Resque
 
     # Attempts to grab a job off one of the provided queues. Returns
     # nil if no job can be found.
-    def reserve
-      queues.each do |queue|
-        log_with_severity :debug, "Checking #{queue}"
-        if job = Resque.reserve(queue)
-          log_with_severity :debug, "Found job on #{queue}"
+    #
+    # Blocks for up to `interval` seconds
+    def reserve(interval=5.0)
+      available_queues = reservable_queues
+      if blocking_reserve?
+        if available_queues.empty?
+          sleep interval # prevent busy-wait.
+          return
+        elsif job = Job.blocking_reserve(available_queues, interval)
+          log_with_severity :debug, "Found job on #{job.queue}"
           return job
         end
+      else
+        available_queues.each do |queue|
+          log_with_severity :debug, "Checking #{queue}"
+          if job = Job.reserve(queue)
+            log_with_severity :debug, "Found job on #{queue}"
+            return job
+          end
+        end
+        sleep interval
+        return
       end
-
-      nil
-    rescue Exception => e
-      log_with_severity :error, "Error reserving job: #{e.inspect}"
-      log_with_severity :error, e.backtrace.join("\n")
-      raise e
-    end
-
-    # Attempts to grab a job off one of the provided queues. Returns
-    # nil if no job can be found.
-    #
-    # Blocks for up to `interval` seconds.
-    def blocking_reserve(interval)
-      available_queues = reservable_queues
-      if available_queues.empty?
-        sleep interval # prevent busy-wait.
-      elsif job = Job.blocking_reserve(available_queues, interval)
-        log! "Found job on #{job.queue}"
-        return job
-      end
-
-      nil
     rescue Exception => e
       log_with_severity :error, "Error reserving job: #{e.inspect}"
       log_with_severity :error, e.backtrace.join("\n")

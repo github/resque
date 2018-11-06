@@ -246,6 +246,15 @@ module Resque
     end
   end
 
+  attr_writer :blocking_reserve
+  def blocking_reserve
+    if defined? @blocking_reserve
+      @blocking_reserve
+    else
+      @blocking_reserve = false
+    end
+  end
+
   attr_writer :queue_name_prefix
   def queue_name_prefix(&block)
     if block

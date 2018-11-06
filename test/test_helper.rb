@@ -75,6 +75,10 @@ else
   Resque.redis = 'localhost:9736'
 end
 
+if ENV.key?('RESQUE_BLOCKING_RESERVE')
+  Resque.blocking_reserve = true
+end
+
 ##
 # Helper to perform job classes
 #
