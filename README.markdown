@@ -370,6 +370,13 @@ And workers on our specialized archive machine with this command:
 
     $ QUEUE=archive rake resque:work
 
+#### Blocking and Non-blocking Pop
+
+Resque allows you to configure `Resque.blocking_reserve = true` to alter the way
+jobs are selected from queues. By default Resque will use Redis::Namespace `lpop`
+to pull jobs from the queue. After setting `blocking_reserve` to `true` Resque
+will use `blpop` for all jobs.
+
 
 ### Running All Queues
 

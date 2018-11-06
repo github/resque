@@ -219,6 +219,7 @@ module Resque
     end
   end
 
+  # Setting `per_worker_stats = false` opts *out* of tracking these statistics.
   attr_writer :per_worker_stats
   def per_worker_stats
     if defined? @per_worker_stats
@@ -228,6 +229,7 @@ module Resque
     end
   end
 
+  # Setting `track_starts = false` opts *out* of tracking these statistics.
   attr_writer :track_starts
   def track_starts
     if defined? @track_starts
@@ -237,6 +239,10 @@ module Resque
     end
   end
 
+  # Standard Resque workers store the list of queues they're listening to in
+  # their name; this can cause Redis performance issues with long queue lists.
+  # Setting `Resque.queues_in_names = false` makes workers keep the list in a
+  # separate Redis entry.
   attr_writer :queues_in_names
   def queues_in_names
     if defined? @queues_in_names
@@ -246,6 +252,9 @@ module Resque
     end
   end
 
+  # By default jobs are selected from the queue using `pop`. Setting this
+  # attribute to `true` well set all queues to use the blocking version `blpop`
+  # from Redis.
   attr_writer :blocking_reserve
   def blocking_reserve
     if defined? @blocking_reserve

@@ -73,6 +73,9 @@ The available hooks are:
 * `before_enqueue`: Called with the job args before a job is placed on the queue.
   If the hook returns `false`, the job will not be placed on the queue.
 
+* `before_push`: Called with the job to be pushed onto the queue when using
+  `Resque.create(...)`.
+
 * `after_enqueue`: Called with the job args after a job is placed on the queue.
   Any exception raised propagates up to the code which queued the job.
 
@@ -95,8 +98,17 @@ The available hooks are:
   thrown by `perform`, but any that are not caught will propagate up to the
   `Resque::Failure` backend.
 
+* `after_perform`: Called with the job after a job is done working. This could
+  be used to decide when to shut down workers that consume too much RAM, for example.
+
 * `on_failure`: Called with the exception and job args if any exception occurs
   while performing the job (or hooks), this includes Resque::DirtyExit.
+
+* `before_reserve`: Called with the reserved queue. This hook is used to
+  determine which `reservable_queues` should be checked for work. The block will
+  be called once for each of the worker's assigned queues; raising
+  `Resque::DontReserve` will skip that queue. Only run when
+  `Resque.blocking_reserve` is `true`.
 
 Hooks are easily implemented with superclasses or modules. A superclass could
 look something like this.
