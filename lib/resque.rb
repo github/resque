@@ -264,6 +264,8 @@ module Resque
     end
   end
 
+  # This block will receive the queue name passed to `enqueue_to`. Its return
+  # value will be the actual queue name. Defaults to the identity function.
   attr_writer :queue_name_prefix
   def queue_name_prefix(&block)
     if block

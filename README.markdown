@@ -873,6 +873,13 @@ We recommend sticking this in your initializer somewhere after Redis
 is configured.
 
 
+Worker Role
+-----------
+
+Setting `Resque.worker_role` will add the given string to the worker's hostname
+separated with a `/`.
+
+
 Demo
 ----
 
