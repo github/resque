@@ -107,8 +107,7 @@ The available hooks are:
 * `before_reserve`: Called with the reserved queue. This hook is used to
   determine which `reservable_queues` should be checked for work. The block will
   be called once for each of the worker's assigned queues; raising
-  `Resque::DontReserve` will skip that queue. Only run when
-  `Resque.blocking_reserve` is `true`.
+  `Resque::DontReserve` will skip that queue.
 
 Hooks are easily implemented with superclasses or modules. A superclass could
 look something like this.
