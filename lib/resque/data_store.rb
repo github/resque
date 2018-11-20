@@ -257,7 +257,7 @@ module Resque
         @redis.pipelined do
           @redis.sadd(:workers, worker)
           unless queues_in_names
-            @redis.set("worker:#{worker}:queues", worker.queues.join(","))
+            @redis.set("worker:#{worker}:queues", worker.assigned_queues.join(","))
           end
           worker_started(worker)
         end

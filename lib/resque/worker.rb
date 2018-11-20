@@ -221,6 +221,11 @@ module Resque
       end
     end
 
+    # Returns a list of queues assigned to this worker. Does not expand wildcards.
+    def assigned_queues
+      @queues
+    end
+
     def glob_match(list, pattern)
       list.select do |queue|
         File.fnmatch?(pattern, queue)

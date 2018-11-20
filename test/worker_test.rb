@@ -1434,6 +1434,14 @@ describe "Resque::Worker with queues_in_names false" do
     assert_equal ["jobs"], loaded_queues
   end
 
+  it "loads queues for a worker with wildcards" do
+    splat_worker = Resque::Worker.new("*")
+    splat_worker.to_s = "bar:3:-"
+    splat_worker.register_worker
+
+    assert_equal ["*"], Resque.data_store.get_worker_queues(splat_worker)
+  end
+
   it "prunes dead workers with heartbeat older than prune interval" do
     assert_equal({}, Resque::Worker.all_heartbeats)
     now = Time.now
