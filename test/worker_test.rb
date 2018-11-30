@@ -466,7 +466,7 @@ describe "Resque::Worker" do
     without_forking do
       @worker.extend(AssertInWorkBlock).work(0) do
         task = @worker.job
-        assert_equal({"args"=>[20, "/tmp"], "class"=>"SomeJob"}, task['payload'])
+        assert_equal({"args"=>[20, "/tmp"], "class"=>"SomeJob"}, task['payload'].slice("args", "class"))
         assert task['run_at']
         assert_equal 'jobs', task['queue']
       end
@@ -535,6 +535,23 @@ describe "Resque::Worker" do
     assert_equal 2, @worker.failed
   end
 
+  it "does not track per-worker stats when turned off" do
+    Resque.per_worker_stats = false
+    Resque::Job.create(:jobs, BadJob)
+    Resque::Job.create(:jobs, BadJob)
+
+    3.times do
+      job = @worker.reserve
+      @worker.process job
+    end
+    assert_equal 0, @worker.processed
+    assert_equal 0, @worker.failed
+    assert_equal 3, Resque::Stat["processed"]
+    assert_equal 2, Resque::Stat["failed"]
+
+    Resque.per_worker_stats = true
+  end
+
   it "stats are erased when the worker goes away" do
     @worker.work(0)
     assert_equal 0, @worker.processed
@@ -545,9 +562,21 @@ describe "Resque::Worker" do
     time = Time.now
     without_forking do
       @worker.extend(AssertInWorkBlock).work(0) do
-        assert Time.parse(@worker.started) - time < 0.1
+        assert @worker.started
+        difference = Time.parse(@worker.started) - time
+        assert difference < 0.1
       end
     end
+  end
+
+  it "doesn't track start if disabled" do
+    Resque.track_starts = false
+      without_forking do
+        @worker.extend(AssertInWorkBlock).work(0) do
+          assert_nil @worker.started
+        end
+      end
+    Resque.track_starts = true
   end
 
   it "knows whether it exists or not" do
@@ -670,6 +699,71 @@ describe "Resque::Worker" do
     assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
     assert_equal [], Resque::Worker.all_workers_with_expired_heartbeats
   end
+
+  it "skips workers on other hosts" do
+    assert_equal({}, Resque::Worker.all_heartbeats)
+    now = Time.now
+
+    @worker.hostname = "bar"
+
+    workerA = Resque::Worker.new(:jobs)
+    workerA.pid = 3
+    workerA.hostname = "bar"
+    workerA.register_worker
+    workerA.heartbeat!(now)
+
+    assert_equal 1, Resque.workers.size
+    assert Resque::Worker.all_heartbeats.key?(workerA.to_s)
+
+    workerB = Resque::Worker.new(:jobs)
+    workerB.pid = 4
+    workerB.hostname = "baz"
+    workerB.register_worker
+    workerB.heartbeat!(now)
+
+    assert_equal 2, Resque.workers.size
+    assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
+
+    @worker.prune_dead_workers
+
+    assert_equal 1, Resque.workers.size
+    refute Resque::Worker.all_heartbeats.key?(workerA.to_s)
+    assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
+    assert_equal [], Resque::Worker.all_workers_with_expired_heartbeats
+  end
+
+  it "prunes regardless of role" do
+    assert_equal({}, Resque::Worker.all_heartbeats)
+    now = Time.now
+
+    @worker.hostname = "bar"
+
+    workerA = Resque::Worker.new(:jobs)
+    workerA.pid = 3
+    workerA.hostname = "bar/wat"
+    workerA.register_worker
+    workerA.heartbeat!(now)
+
+    assert_equal 1, Resque.workers.size
+    assert Resque::Worker.all_heartbeats.key?(workerA.to_s)
+
+    workerB = Resque::Worker.new(:jobs)
+    workerB.pid = 4
+    workerB.hostname = "baz"
+    workerB.register_worker
+    workerB.heartbeat!(now)
+
+    assert_equal 2, Resque.workers.size
+    assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
+
+    @worker.prune_dead_workers
+
+    assert_equal 1, Resque.workers.size
+    refute Resque::Worker.all_heartbeats.key?(workerA.to_s)
+    assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
+    assert_equal [], Resque::Worker.all_workers_with_expired_heartbeats
+  end
+
 
   it "does not prune if another worker has pruned (started pruning) recently" do
     now = Time.now
@@ -1093,6 +1187,16 @@ describe "Resque::Worker" do
     assert_equal 1, Resque::Failure.count
   end
 
+  it "before_reserve hook can stop a worker from pulling from queue" do
+    Resque.before_reserve do |queue|
+      raise Resque::Job::DontReserve if queue == "jobs"
+    end
+    worker = Resque::Worker.new(:jobs, :more_jobs)
+    worker.work(0)
+    assert_equal 1, Resque.size(:jobs)
+    Resque.before_reserve = nil
+  end
+
   it "no reconnects to redis when not forking" do
     original_connection = Resque.redis._client.connection.instance_variable_get("@sock")
     without_forking do
@@ -1300,5 +1404,70 @@ describe "Resque::Worker" do
 
       assert_kind_of Process::Status, exception.process_status
     end
+  end
+end
+
+describe "Resque::Worker with queues_in_names false" do
+  before do
+    Resque.queues_in_names = false
+    @worker = Resque::Worker.new(:jobs)
+    Resque::Job.create(:jobs, SomeJob, 20, '/tmp')
+  end
+
+  after do
+    Resque.queues_in_names = true
+  end
+
+  it "has a unique id" do
+    assert_equal "#{`hostname`.chomp}:#{$$}:-", @worker.to_s
+  end
+
+  it "loads queues from the data store" do
+    loaded_queues = nil
+    without_forking do
+      @worker.extend(AssertInWorkBlock).work(0) do
+        found_worker = Resque::Worker.find(@worker.to_s)
+        assert found_worker
+        loaded_queues = found_worker.queues
+      end
+    end
+    assert_equal ["jobs"], loaded_queues
+  end
+
+  it "loads queues for a worker with wildcards" do
+    splat_worker = Resque::Worker.new("*")
+    splat_worker.to_s = "bar:3:-"
+    splat_worker.register_worker
+
+    assert_equal ["*"], Resque.data_store.get_worker_queues(splat_worker)
+  end
+
+  it "prunes dead workers with heartbeat older than prune interval" do
+    assert_equal({}, Resque::Worker.all_heartbeats)
+    now = Time.now
+
+    workerA = Resque::Worker.new(:jobs)
+    workerA.to_s = "bar:3:jobs"
+    workerA.register_worker
+    workerA.heartbeat!(now - Resque.prune_interval - 1)
+
+    assert_equal 1, Resque.workers.size
+    assert Resque::Worker.all_heartbeats.key?(workerA.to_s)
+
+    workerB = Resque::Worker.new(:jobs)
+    workerB.to_s = "foo:5:jobs"
+    workerB.register_worker
+    workerB.heartbeat!(now)
+
+    assert_equal 2, Resque.workers.size
+    assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
+    assert_equal [workerA], Resque::Worker.all_workers_with_expired_heartbeats
+
+    @worker.prune_dead_workers
+
+    assert_equal 1, Resque.workers.size
+    refute Resque::Worker.all_heartbeats.key?(workerA.to_s)
+    assert Resque::Worker.all_heartbeats.key?(workerB.to_s)
+    assert_equal [], Resque::Worker.all_workers_with_expired_heartbeats
   end
 end

@@ -48,7 +48,7 @@ module Resque
     def self.decode(object)
       Resque.decode(object)
     end
-    
+
     # Given a word with dashes, returns a camel cased version of it.
     def classify(dashed_word)
       Resque.classify(dashed_word)
@@ -62,6 +62,10 @@ module Resque
     # Raise Resque::Job::DontPerform from a before_perform hook to
     # abort the job.
     DontPerform = Class.new(StandardError)
+
+    # Raise Resque::Job::DontReserve from a before_reserve hook to
+    # stop the worker from taking a job from the queue.
+    DontReserve = Class.new(StandardError)
 
     # The worker object which is currently processing this job.
     attr_accessor :worker
@@ -92,7 +96,12 @@ module Resque
         # decode(encode(args)) to ensure that args are normalized in the same manner as a non-inline job
         new(:inline, {'class' => klass, 'args' => decode(encode(args))}).perform
       else
-        Resque.push(queue, :class => klass.to_s, :args => args)
+        job = new(queue, {'class' => klass.to_s, 'args' => decode(encode(args))})
+        job.queued_at = Time.now
+        Resque.before_push.each do |hook|
+          hook.call(job)
+        end
+        Resque.push(job.queue, job.payload)
       end
     end
 
@@ -131,7 +140,13 @@ module Resque
           end
         end
       else
-        destroyed += data_store.remove_from_queue(queue, encode(:class => klass, :args => args))
+        cleaned_args = decode(encode(args))
+        data_store.everything_in_queue(queue).each do |string|
+          payload = decode(string)
+          if payload['class'] == klass && payload['args'] == cleaned_args
+            destroyed += data_store.remove_from_queue(queue,string).to_i
+          end
+        end
       end
 
       destroyed
@@ -142,6 +157,12 @@ module Resque
     def self.reserve(queue)
       return unless payload = Resque.pop(queue)
       new(queue, payload)
+    end
+
+    def self.blocking_reserve(queues, interval)
+      return if queues.empty?
+      queue, payload = Resque.blocking_pop(queues, interval)
+      payload && new(queue, payload)
     end
 
     # Attempts to perform the work represented by this job instance.
@@ -173,11 +194,11 @@ module Resque
           stack = around_hooks.reverse.inject(nil) do |last_hook, hook|
             if last_hook
               lambda do
-                job.send(hook, *job_args) { last_hook.call }
+                call_around_hook(job, hook: hook, args: job_args) { last_hook.call }
               end
             else
               lambda do
-                job.send(hook, *job_args) do
+                call_around_hook(job, hook: hook, args: job_args) do
                   result = job.perform(*job_args)
                   job_was_performed = true
                   result
@@ -204,6 +225,14 @@ module Resque
       end
     end
 
+    def call_around_hook(job, hook:, args:, &block)
+      if hook.to_s.end_with?('_with_job')
+        job.send(hook, self, &block)
+      else
+        job.send(hook, *args, &block)
+      end
+    end
+
     # Returns the actual class constant represented in this job's payload.
     def payload_class
       @payload_class ||= constantize(@payload['class'])
@@ -225,6 +254,20 @@ module Resque
     # Returns an array of args represented in this job's payload.
     def args
       @payload['args']
+    end
+
+    # Returns the metadata from the job's payload
+    def metadata
+      payload["meta"] ||= {}
+    end
+
+    # Returns the Time that this Job was queued, or nil.
+    def queued_at
+      @queued_at ||= metadata.key?("queued_at") ? Time.at(metadata["queued_at"]) : nil
+    end
+
+    def queued_at=(v)
+      metadata['queued_at'] = v.to_f
     end
 
     # Given an exception object, hands off the needed parameters to
@@ -276,6 +319,9 @@ module Resque
 
     def failure_hooks
       @failure_hooks ||= Plugin.failure_hooks(payload_class)
+    rescue NameError
+      # if the payload class doesn't exist, there are no hooks
+      []
     end
 
     def run_failure_hooks(exception)

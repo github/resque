@@ -67,6 +67,18 @@ module Resque
     attr_writer :to_s
     attr_writer :pid
 
+    def queues_in_names
+      Resque.queues_in_names
+    end
+
+    def worker_role
+      Resque.worker_role
+    end
+
+    def blocking_reserve?
+      Resque.blocking_reserve
+    end
+
     # Returns an array of all worker objects.
     def self.all
       data_store.worker_ids.map { |id| find(id, :skip_exists => true) }.compact
@@ -198,12 +210,20 @@ module Resque
     # A splat ("*") means you want every queue (in alpha order) - this
     # can be useful for dynamically adding new queues.
     def queues
+      if !queues_in_names && @queues == ["-"]
+        self.queues = data_store.get_worker_queues(self)
+      end
       if @has_dynamic_queues
         current_queues = Resque.queues
         @queues.map { |queue| glob_match(current_queues, queue) }.flatten.uniq
       else
         @queues
       end
+    end
+
+    # Returns a list of queues assigned to this worker. Does not expand wildcards.
+    def assigned_queues
+      @queues
     end
 
     def glob_match(list, pattern)
@@ -235,11 +255,16 @@ module Resque
       loop do
         break if shutdown?
 
-        unless work_one_job(&block)
+        if paused?
           break if interval.zero?
           log_with_severity :debug, "Sleeping for #{interval} seconds"
-          procline paused? ? "Paused" : "Waiting for #{queues.join(',')}"
+          procline "Paused"
           sleep interval
+        else
+          procline "Waiting for #{queues.join(',')}"
+          unless work_one_job(interval: interval, &block)
+            break if interval.zero?
+          end
         end
       end
 
@@ -250,9 +275,9 @@ module Resque
       unregister_worker(exception)
     end
 
-    def work_one_job(job = nil, &block)
+    def work_one_job(job = nil, interval: 5.0, &block)
       return false if paused?
-      return false unless job ||= reserve
+      return false unless job ||= reserve(interval)
 
       working_on job
       procline "Processing #{job.queue} since #{Time.now.to_i} [#{job.payload_class_name}]"
@@ -267,6 +292,7 @@ module Resque
       end
 
       done_working
+      run_hook :after_perform, job
       true
     end
 
@@ -317,20 +343,44 @@ module Resque
 
     # Attempts to grab a job off one of the provided queues. Returns
     # nil if no job can be found.
-    def reserve
-      queues.each do |queue|
-        log_with_severity :debug, "Checking #{queue}"
-        if job = Resque.reserve(queue)
-          log_with_severity :debug, "Found job on #{queue}"
+    #
+    # Blocks for up to `interval` seconds
+    def reserve(interval=5.0)
+      available_queues = reservable_queues
+      if blocking_reserve?
+        if available_queues.empty?
+          sleep interval # prevent busy-wait.
+          return
+        elsif job = Job.blocking_reserve(available_queues, interval)
+          log_with_severity :debug, "Found job on #{job.queue}"
           return job
         end
+      else
+        available_queues.each do |queue|
+          log_with_severity :debug, "Checking #{queue}"
+          if job = Job.reserve(queue)
+            log_with_severity :debug, "Found job on #{queue}"
+            return job
+          end
+        end
+        sleep interval
+        return
       end
-
-      nil
     rescue Exception => e
       log_with_severity :error, "Error reserving job: #{e.inspect}"
       log_with_severity :error, e.backtrace.join("\n")
       raise e
+    end
+
+    def reservable_queues
+      queues.select do |queue|
+        begin
+          run_hook :before_reserve, queue
+          true
+        rescue Job::DontReserve
+          false
+        end
+      end
     end
 
     # Reconnect to Redis to avoid sharing a connection with the parent,
@@ -359,7 +409,7 @@ module Resque
       register_signal_handlers
       start_heartbeat
       prune_dead_workers
-      run_hook :before_first_fork
+      run_hook :before_first_fork, self
       register_worker
 
       # Fix buffering so we can `rake resque:work > resque.log` and
@@ -595,9 +645,10 @@ module Resque
       return unless data_store.acquire_pruning_dead_worker_lock(self, Resque.heartbeat_interval)
 
       all_workers = Worker.all
+      our_queues = queues.to_set
 
       unless all_workers.empty?
-        known_workers = worker_pids
+        known_workers = worker_pids.map(&:to_i)
         all_workers_with_expired_heartbeats = Worker.all_workers_with_expired_heartbeats
       end
 
@@ -616,9 +667,8 @@ module Resque
           next
         end
 
-        host, pid, worker_queues_raw = worker.id.split(':')
-        worker_queues = worker_queues_raw.split(",")
-        unless @queues.include?("*") || (worker_queues.to_set == @queues.to_set)
+        worker_queues = worker.queues.to_set
+        unless worker_queues <= our_queues
           # If the worker we are trying to prune does not belong to the queues
           # we are listening to, we should not touch it.
           # Attempt to prune a worker from different queues may easily result in
@@ -627,8 +677,8 @@ module Resque
           next
         end
 
-        next unless host == hostname
-        next if known_workers.include?(pid)
+        next unless worker.hostname_without_role == hostname_without_role
+        next if known_workers.include?(worker.pid)
 
         log_with_severity :debug, "Pruning dead worker: #{worker}"
         worker.unregister_worker
@@ -719,10 +769,16 @@ module Resque
       Stat["processed:#{self}"]
     end
 
+    def per_worker_stats
+      Resque.per_worker_stats
+    end
+
     # Tell Redis we've processed a job.
     def processed!
       Stat << "processed"
-      Stat << "processed:#{self}"
+      if per_worker_stats
+        Stat << "processed:#{self}"
+      end
     end
 
     # How many failed jobs has this worker seen? Returns an int.
@@ -733,7 +789,9 @@ module Resque
     # Tells Redis we've failed a job.
     def failed!
       Stat << "failed"
-      Stat << "failed:#{self}"
+      if per_worker_stats
+        Stat << "failed:#{self}"
+      end
     end
 
     # What time did this worker start? Returns an instance of `Time`
@@ -787,13 +845,30 @@ module Resque
     # The string representation is the same as the id for this worker
     # instance. Can be used with `Worker.find`.
     def to_s
-      @to_s ||= "#{hostname}:#{pid}:#{@queues.join(',')}"
+      @to_s ||= if queues_in_names
+                  "#{hostname}:#{pid}:#{@queues.join(',')}"
+                else
+                  "#{hostname}:#{pid}:-"
+                end
     end
     alias_method :id, :to_s
 
     # chomp'd hostname of this worker's machine
     def hostname
-      @hostname ||= Socket.gethostname
+      @hostname ||= if worker_role
+                      "#{Socket.gethostname}/#{worker_role}"
+                    else
+                      Socket.gethostname
+                    end
+    end
+
+    def role
+      return @role if defined? @role
+      @role = hostname.split("/")[1]
+    end
+
+    def hostname_without_role
+      @hostname_without_role ||= hostname.split("/").first
     end
 
     # Returns Integer PID of running worker

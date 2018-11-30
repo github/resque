@@ -219,6 +219,66 @@ module Resque
     end
   end
 
+  # Setting `per_worker_stats = false` opts *out* of tracking these statistics.
+  attr_writer :per_worker_stats
+  def per_worker_stats
+    if defined? @per_worker_stats
+      @per_worker_stats
+    else
+      @per_worker_stats = true
+    end
+  end
+
+  # Setting `track_starts = false` opts *out* of tracking these statistics.
+  attr_writer :track_starts
+  def track_starts
+    if defined? @track_starts
+      @track_starts
+    else
+      @track_starts = true
+    end
+  end
+
+  # Standard Resque workers store the list of queues they're listening to in
+  # their name; this can cause Redis performance issues with long queue lists.
+  # Setting `Resque.queues_in_names = false` makes workers keep the list in a
+  # separate Redis entry.
+  attr_writer :queues_in_names
+  def queues_in_names
+    if defined? @queues_in_names
+      @queues_in_names
+    else
+      @queues_in_names = true
+    end
+  end
+
+  # By default jobs are selected from the queue using `pop`. Setting this
+  # attribute to `true` well set all queues to use the blocking version `blpop`
+  # from Redis.
+  attr_writer :blocking_reserve
+  def blocking_reserve
+    if defined? @blocking_reserve
+      @blocking_reserve
+    else
+      @blocking_reserve = false
+    end
+  end
+
+  # This block will receive the queue name passed to `enqueue_to`. Its return
+  # value will be the actual queue name. Defaults to the identity function.
+  attr_writer :queue_name_prefix
+  def queue_name_prefix(&block)
+    if block
+      @queue_name_prefix = block
+    elsif defined? @queue_name_prefix
+      @queue_name_prefix
+    else
+      @queue_name_prefix = -> (x) { x }
+    end
+  end
+
+  attr_accessor :worker_role
+
   # The `before_first_fork` hook will be run in the **parent** process
   # only once, before forking to run the first job. Be careful- any
   # changes you make will be permanent for the lifespan of the
@@ -287,6 +347,30 @@ module Resque
     register_hook(:after_pause, block)
   end
 
+  def before_reserve(&block)
+    block ? register_hook(:before_reserve, block) : hooks(:before_reserve)
+  end
+
+  def before_reserve=(block)
+    register_hook(:before_reserve, block)
+  end
+
+  def after_perform(&block)
+    block ? register_hook(:after_perform, block) : hooks(:after_perform)
+  end
+
+  def after_perform=(block)
+    register_hook(:after_perform, block)
+  end
+
+  def before_push(&block)
+    block ? register_hook(:before_push, block) : hooks(:before_push)
+  end
+
+  def before_push=(block)
+    register_hook(:before_push, block)
+  end
+
   def to_s
     "Resque Client connected to #{redis_id}"
   end
@@ -326,6 +410,11 @@ module Resque
   # Returns a Ruby object.
   def pop(queue)
     decode(data_store.pop_from_queue(queue))
+  end
+
+  def blocking_pop(queues, interval)
+    queue, payload = data_store.blocking_pop(queues, interval)
+    queue && [queue, decode(payload)]
   end
 
   # Returns an integer representing the size of a queue.
@@ -419,7 +508,7 @@ module Resque
     end
     return nil if before_hooks.any? { |result| result == false }
 
-    Job.create(queue, klass, *args)
+    Job.create(prefixed_queue_name(queue), klass, *args)
 
     Plugin.after_enqueue_hooks(klass).each do |hook|
       klass.send(hook, *args)
@@ -427,6 +516,11 @@ module Resque
 
     return true
   end
+
+  def prefixed_queue_name(base_name)
+    queue_name_prefix.call(base_name)
+  end
+  private :prefixed_queue_name
 
   # This method can be used to conveniently remove a job from a queue.
   # It assumes the class you're passing it is a real Ruby class (not

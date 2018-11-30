@@ -16,6 +16,7 @@ module Resque
 
     def_delegators :@queue_access, :push_to_queue,
                                    :pop_from_queue,
+                                   :blocking_pop,
                                    :queue_size,
                                    :peek_in_queue,
                                    :queue_names,
@@ -36,6 +37,7 @@ module Resque
     def_delegators :@workers, :worker_ids,
                               :workers_map,
                               :get_worker_payload,
+                              :get_worker_queues,
                               :worker_exists?,
                               :register_worker,
                               :worker_started,
@@ -108,6 +110,13 @@ module Resque
       # Pop whatever is on queue
       def pop_from_queue(queue)
         @redis.lpop(redis_key_for_queue(queue))
+      end
+
+      def blocking_pop(queues, interval)
+        queue_names = Array(queues).map { |queue| "queue:#{queue}" }
+        timeout = [1, Integer(interval)].max # require nonzero, no infinite blocking
+        queue, payload = @redis.blpop(*queue_names, timeout)
+        queue && [queue.sub("queue:", ""), payload]
       end
 
       # Get the number of items in the queue
@@ -231,6 +240,15 @@ module Resque
         @redis.get("worker:#{worker_id}")
       end
 
+      def get_worker_queues(worker_id)
+        raw_queues = @redis.get("worker:#{worker_id}:queues")
+        if raw_queues
+          raw_queues.split(',')
+        else
+          []
+        end
+      end
+
       def worker_exists?(worker_id)
         @redis.sismember(:workers, worker_id)
       end
@@ -238,19 +256,29 @@ module Resque
       def register_worker(worker)
         @redis.pipelined do
           @redis.sadd(:workers, worker)
+          unless queues_in_names
+            @redis.set("worker:#{worker}:queues", worker.assigned_queues.join(","))
+          end
           worker_started(worker)
         end
       end
 
       def worker_started(worker)
-        @redis.set(redis_key_for_worker_start_time(worker), Time.now.to_s)
+        if track_starts
+          @redis.set(redis_key_for_worker_start_time(worker), Time.now.to_s)
+        end
       end
 
       def unregister_worker(worker, &block)
         @redis.pipelined do
           @redis.srem(:workers, worker)
           @redis.del(redis_key_for_worker(worker))
-          @redis.del(redis_key_for_worker_start_time(worker))
+          unless queues_in_names
+            @redis.del("worker:#{worker}:queues")
+          end
+          if track_starts
+            @redis.del(redis_key_for_worker_start_time(worker))
+          end
           @redis.hdel(HEARTBEAT_KEY, worker.to_s)
 
           block.call
@@ -305,6 +333,14 @@ module Resque
 
       def redis_key_for_worker_pruning
         "pruning_dead_workers_in_progress"
+      end
+
+      def track_starts
+        Resque.track_starts
+      end
+
+      def queues_in_names
+        Resque.queues_in_names
       end
     end
 

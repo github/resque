@@ -111,6 +111,24 @@ describe "Resque::Job around_perform" do
     assert_equal history, [:start_around_perform, :perform, :finish_around_perform]
   end
 
+  class ::AroundPerformWithJob
+    def self.perform(history)
+      history << :perform
+    end
+    def self.around_perform_record_history_with_job(job)
+      history = job.args.first
+      history << :start_around_perform
+      yield
+      history << :finish_around_perform
+    end
+  end
+
+  it "it runs around_perform, passing the job, then yields in order to perform" do
+    result = perform_job(AroundPerformWithJob, history=[])
+    assert_equal true, result, "perform returned true"
+    assert_equal history, [:start_around_perform, :perform, :finish_around_perform]
+  end
+
   class ::AroundPerformJobFailsBeforePerforming
     def self.perform(history)
       history << :perform

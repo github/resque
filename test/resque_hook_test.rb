@@ -13,6 +13,13 @@ describe "Resque Hooks" do
     @worker = Resque::Worker.new(:jobs)
   end
 
+  after do
+    Resque.before_first_fork = nil
+    Resque.before_fork = nil
+    Resque.after_fork = nil
+    Resque.before_push = nil
+  end
+
   it 'retrieving hooks if none have been set' do
     assert_equal [], Resque.before_first_fork
     assert_equal [], Resque.before_fork
@@ -91,6 +98,18 @@ describe "Resque Hooks" do
 
     Resque::Job.create(:jobs, CallNotifyJob)
     @worker.work(0)
+  end
+
+  it 'calls before_push callbacks with the job' do
+    job = nil
+
+    Resque.before_push { |j| job = j }
+
+    Resque::Job.create(:jobs, CallNotifyJob)
+    @worker.work(0)
+
+    assert job
+    assert job.queued_at
   end
 
   it 'it registers multiple before_first_forks' do
