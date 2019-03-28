@@ -23,12 +23,12 @@ context "Resque" do
 
   test "can a redis URL" do
     Resque.redis = 'redis://localhost:9736'
-    assert_equal 'redis://localhost:9736', Resque.redis.client.options[:url]
+    assert_equal 'redis://localhost:9736', Resque.redis._client.options[:url]
   end
 
   test "can a unix socket URL" do
     Resque.redis = 'unix:///tmp/redis.sock'
-    assert_equal 'unix:///tmp/redis.sock', Resque.redis.client.options[:url]
+    assert_equal 'unix:///tmp/redis.sock', Resque.redis._client.options[:url]
   end
 
   test "redis= works correctly with a Redis::Namespace param" do

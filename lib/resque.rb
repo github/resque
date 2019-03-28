@@ -28,7 +28,7 @@ module Resque
     case server
     when String
       if server =~ %r{redis://} || server =~ %r{unix://}
-        redis = Redis.connect(:url => server, :thread_safe => true)
+        redis = Redis.new(:url => server, :thread_safe => true)
       else
         server, namespace = server.split('/', 2)
         host, port, db = server.split(':')
@@ -49,8 +49,7 @@ module Resque
   # create a new one.
   def redis
     return @redis if @redis
-    self.redis = Redis.respond_to?(:connect) ? Redis.connect : "localhost:6379"
-    self.redis
+    self.redis = Redis.new
   end
 
   def redis_id
@@ -60,7 +59,7 @@ module Resque
     elsif redis.respond_to?(:nodes) # distributed
       redis.nodes.map { |n| n.id }.join(', ')
     else
-      redis.client.id
+      redis._client.id
     end
   end
 
