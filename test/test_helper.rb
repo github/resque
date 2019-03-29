@@ -6,13 +6,9 @@ Bundler.require(:default, :test)
 dir = File.dirname(File.expand_path(__FILE__))
 $LOAD_PATH.unshift dir + '/../lib'
 $TESTING = true
-require 'test/unit'
-
-begin
-  require 'leftright'
-rescue LoadError
-end
-
+require "test/unit"
+require "mocha/minitest"
+require "mocha/test_unit"
 
 #
 # make sure we can run redis
