@@ -179,6 +179,12 @@ context "Resque" do
     assert_equal nil, Resque.pop(:people)
   end
 
+  test "can retry popping off items" do
+    Resque.redis.stubs(:blpop).raises(Redis::TimeoutError, "connection reset").then.returns(["queue:people", "{\"name\":\"chris\"}"])
+    assert_equal(["people", { 'name' => 'chris' }], Resque.pop(:people))
+    Resque.redis.unstub(:blpop)
+  end
+
   test "knows how big a queue is" do
     assert_equal 3, Resque.size(:people)
 

@@ -180,11 +180,35 @@ module Resque
   #           indeterminate blocking.
   #
   # Returns an array of [queue_name, decoded_payload], or falsey.
-  def pop(queues, timeout=1)
+  def pop(queues, timeout = 1, retries = 3)
     queue_names = Array(queues).map { |queue| "queue:#{queue}" }
     timeout = [1, timeout].max # require nonzero, no infinite blocking
-    queue, payload = redis.blpop(*queue_names, timeout)
-    queue && [queue.sub("queue:", ""), decode(payload)]
+    begin
+      queue, payload = redis.blpop(*queue_names, timeout)
+      queue && [queue.sub("queue:", ""), decode(payload)]
+    rescue Redis::TimeoutError => e
+      # This exception happens when Redis goes
+      # away or we failover through a proxy layer.
+      if reconnect(retries)
+        # Wait for a random time between 0 and 1 second to prevent thundering reconnect herd
+        sleep rand
+        retry
+      else
+        raise e
+      end
+    end
+  end
+
+  def reconnect(retries = 3)
+    begin
+      return false if retries <= 0
+      redis._client.reconnect
+      true
+    rescue ::Redis::BaseConnectionError => e
+      retries =- 1
+      sleep rand
+      retry
+    end
   end
 
   # Returns an integer representing the size of a queue.
