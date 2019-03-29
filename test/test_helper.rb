@@ -144,6 +144,20 @@ ensure
   Resque::Failure.backend = previous_backend
 end
 
+def reset_resque
+  # We can't flush all with using a namespace, so
+  # clean up the data manually here.
+  Resque.queues.each do |queue|
+    Resque.remove_queue(queue)
+  end
+  Resque.workers.each do |worker|
+    Resque.remove_worker(worker.id)
+  end
+  Resque::Stat.clear(:processed)
+  Resque::Stat.clear(:failed)
+  Resque::Failure.clear
+end
+
 class Time
   # Thanks, Timecop
   class << self
