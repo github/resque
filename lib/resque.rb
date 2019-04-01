@@ -189,9 +189,9 @@ module Resque
     rescue Redis::TimeoutError => e
       # This exception happens when Redis goes
       # away or we failover through a proxy layer.
+      # Wait for a random time between 0 and 1 second to prevent thundering reconnect herd
+      sleep rand
       if reconnect(retries)
-        # Wait for a random time between 0 and 1 second to prevent thundering reconnect herd
-        sleep rand
         retry
       else
         raise e
