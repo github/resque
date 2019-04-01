@@ -21,12 +21,12 @@ context "Resque" do
     assert_equal 'namespace', Resque.redis.namespace
   end
 
-  test "can a redis URL" do
+  test "can set the redis connection to a redis URL" do
     Resque.redis = 'redis://localhost:9736'
     assert_equal 'redis://localhost:9736', Resque.redis._client.options[:url]
   end
 
-  test "can a unix socket URL" do
+  test "can set the redis connection a unix socket URL" do
     Resque.redis = 'unix:///tmp/redis.sock'
     assert_equal 'unix:///tmp/redis.sock', Resque.redis._client.options[:url]
   end
