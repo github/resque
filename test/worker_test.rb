@@ -2,7 +2,7 @@ require 'test_helper'
 
 context "Resque::Worker" do
   setup do
-    Resque.redis.flushall
+    reset_resque
 
     Resque.before_first_fork = nil
     Resque.before_fork = nil
@@ -294,7 +294,7 @@ context "Resque::Worker" do
   end
 
   test "Will call a before_first_fork hook only once" do
-    Resque.redis.flushall
+    reset_resque
     $BEFORE_FORK_CALLED = 0
     Resque.before_first_fork = Proc.new { $BEFORE_FORK_CALLED += 1 }
     workerA = Resque::Worker.new(:jobs)
@@ -311,7 +311,7 @@ context "Resque::Worker" do
   end
 
   test "Will call a before_fork hook before forking" do
-    Resque.redis.flushall
+    reset_resque
     $BEFORE_FORK_CALLED = false
     Resque.before_fork = Proc.new { $BEFORE_FORK_CALLED = true }
     workerA = Resque::Worker.new(:jobs)
@@ -336,7 +336,7 @@ context "Resque::Worker" do
   end
 
   test "Will call an after_fork hook after forking" do
-    Resque.redis.flushall
+    reset_resque
     $AFTER_FORK_CALLED = false
     Resque.after_fork = Proc.new { $AFTER_FORK_CALLED = true }
     workerA = Resque::Worker.new(:jobs)

@@ -21,14 +21,14 @@ module Resque
   #   1. A 'hostname:port' String
   #   2. A 'hostname:port:db' String (to select the Redis db)
   #   3. A 'hostname:port/namespace' String (to set the Redis namespace)
-  #   4. A Redis URL String 'redis://host:port'
+  #   4. A Redis URL String 'redis://host:port' or 'unix:///path'
   #   5. An instance of `Redis`, `Redis::Client`, `Redis::DistRedis`,
   #      or `Redis::Namespace`.
   def redis=(server)
     case server
     when String
-      if server =~ /redis\:\/\//
-        redis = Redis.connect(:url => server, :thread_safe => true)
+      if server =~ %r{redis://} || server =~ %r{unix://}
+        redis = Redis.new(:url => server, :thread_safe => true)
       else
         server, namespace = server.split('/', 2)
         host, port, db = server.split(':')
@@ -49,8 +49,7 @@ module Resque
   # create a new one.
   def redis
     return @redis if @redis
-    self.redis = Redis.respond_to?(:connect) ? Redis.connect : "localhost:6379"
-    self.redis
+    self.redis = Redis.new
   end
 
   def redis_id
@@ -60,7 +59,7 @@ module Resque
     elsif redis.respond_to?(:nodes) # distributed
       redis.nodes.map { |n| n.id }.join(', ')
     else
-      redis.client.id
+      redis._client.id
     end
   end
 
@@ -181,11 +180,35 @@ module Resque
   #           indeterminate blocking.
   #
   # Returns an array of [queue_name, decoded_payload], or falsey.
-  def pop(queues, timeout=1)
+  def pop(queues, timeout = 1, retries = 3)
     queue_names = Array(queues).map { |queue| "queue:#{queue}" }
     timeout = [1, timeout].max # require nonzero, no infinite blocking
-    queue, payload = redis.blpop(*queue_names, timeout)
-    queue && [queue.sub("queue:", ""), decode(payload)]
+    begin
+      queue, payload = redis.blpop(*queue_names, timeout)
+      queue && [queue.sub("queue:", ""), decode(payload)]
+    rescue Redis::TimeoutError => e
+      # This exception happens when Redis goes
+      # away or we failover through a proxy layer.
+      # Wait for a random time between 0 and 1 second to prevent thundering reconnect herd
+      sleep rand
+      if reconnect(retries)
+        retry
+      else
+        raise e
+      end
+    end
+  end
+
+  def reconnect(retries = 3)
+    begin
+      return false if retries <= 0
+      redis._client.reconnect
+      true
+    rescue ::Redis::BaseConnectionError => e
+      retries =- 1
+      sleep rand
+      retry
+    end
   end
 
   # Returns an integer representing the size of a queue.

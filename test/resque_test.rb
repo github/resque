@@ -2,7 +2,7 @@ require 'test_helper'
 
 context "Resque" do
   setup do
-    Resque.redis.flushall
+    reset_resque
 
     Resque.push(:people, { 'name' => 'chris' })
     Resque.push(:people, { 'name' => 'bob' })
@@ -19,6 +19,16 @@ context "Resque" do
     assert_equal :resque, Resque.redis.namespace
     Resque.redis = 'localhost:9736/namespace'
     assert_equal 'namespace', Resque.redis.namespace
+  end
+
+  test "can set the redis connection to a redis URL" do
+    Resque.redis = 'redis://localhost:9736'
+    assert_equal 'redis://localhost:9736', Resque.redis._client.options[:url]
+  end
+
+  test "can set the redis connection a unix socket URL" do
+    Resque.redis = 'unix:///tmp/redis.sock'
+    assert_equal 'unix:///tmp/redis.sock', Resque.redis._client.options[:url]
   end
 
   test "redis= works correctly with a Redis::Namespace param" do
@@ -169,6 +179,12 @@ context "Resque" do
     assert_equal nil, Resque.pop(:people)
   end
 
+  test "can retry popping off items" do
+    Resque.redis.stubs(:blpop).raises(Redis::TimeoutError, "connection reset").then.returns(["queue:people", "{\"name\":\"chris\"}"])
+    assert_equal(["people", { 'name' => 'chris' }], Resque.pop(:people))
+    Resque.redis.unstub(:blpop)
+  end
+
   test "knows how big a queue is" do
     assert_equal 3, Resque.size(:people)
 
@@ -203,8 +219,7 @@ context "Resque" do
   end
 
   test "queues are always a list" do
-    Resque.redis.flushall
-    assert_equal [], Resque.queues
+    assert_instance_of Array, Resque.queues
   end
 
   test "can delete a queue" do

@@ -6,13 +6,9 @@ Bundler.require(:default, :test)
 dir = File.dirname(File.expand_path(__FILE__))
 $LOAD_PATH.unshift dir + '/../lib'
 $TESTING = true
-require 'test/unit'
-
-begin
-  require 'leftright'
-rescue LoadError
-end
-
+require "test/unit"
+require "mocha/minitest"
+require "mocha/test_unit"
 
 #
 # make sure we can run redis
@@ -142,6 +138,20 @@ def with_failure_backend(failure_backend, &block)
   yield block
 ensure
   Resque::Failure.backend = previous_backend
+end
+
+def reset_resque
+  # We can't flush all with using a namespace, so
+  # clean up the data manually here.
+  Resque.queues.each do |queue|
+    Resque.remove_queue(queue)
+  end
+  Resque.workers.each do |worker|
+    Resque.remove_worker(worker.id)
+  end
+  Resque::Stat.clear(:processed)
+  Resque::Stat.clear(:failed)
+  Resque::Failure.clear
 end
 
 class Time
