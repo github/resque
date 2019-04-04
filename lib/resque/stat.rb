@@ -24,7 +24,9 @@ module Resque
     # Can optionally accept a second int parameter. The stat is then
     # incremented by that amount.
     def incr(stat, by = 1)
-      redis.incrby("stat:#{stat}", by)
+      with_retries do
+        redis.incrby("stat:#{stat}", by)
+      end
     end
 
     # Increments a stat by one.
@@ -37,7 +39,9 @@ module Resque
     # Can optionally accept a second int parameter. The stat is then
     # decremented by that amount.
     def decr(stat, by = 1)
-      redis.decrby("stat:#{stat}", by)
+      with_retries do
+        redis.decrby("stat:#{stat}", by)
+      end
     end
 
     # Decrements a stat by one.
@@ -47,7 +51,9 @@ module Resque
 
     # Removes a stat from Redis, effectively setting it to 0.
     def clear(stat)
-      redis.del("stat:#{stat}")
+      with_retries do
+        redis.del("stat:#{stat}")
+      end
     end
   end
 end

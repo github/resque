@@ -166,9 +166,11 @@ module Resque
   #
   # Returns nothing
   def push(queue, item)
-    redis.pipelined do
-      watch_queue(queue)
-      redis.rpush "queue:#{queue}", encode(item)
+    with_retries do
+      redis.pipelined do
+        redis.sadd(:queues, queue.to_s)
+        redis.rpush "queue:#{queue}", encode(item)
+      end
     end
   end
 
@@ -183,19 +185,9 @@ module Resque
   def pop(queues, timeout = 1, retries = 3)
     queue_names = Array(queues).map { |queue| "queue:#{queue}" }
     timeout = [1, timeout].max # require nonzero, no infinite blocking
-    begin
+    with_retries(retries: retries) do
       queue, payload = redis.blpop(*queue_names, timeout)
       queue && [queue.sub("queue:", ""), decode(payload)]
-    rescue Redis::TimeoutError => e
-      # This exception happens when Redis goes
-      # away or we failover through a proxy layer.
-      # Wait for a random time between 0 and 1 second to prevent thundering reconnect herd
-      sleep rand
-      if reconnect(retries)
-        retry
-      else
-        raise e
-      end
     end
   end
 
@@ -214,7 +206,9 @@ module Resque
   # Returns an integer representing the size of a queue.
   # Queue name should be a string.
   def size(queue)
-    redis.llen("queue:#{queue}").to_i
+    with_retries do
+      redis.llen("queue:#{queue}").to_i
+    end
   end
 
   # Returns an array of items currently queued. Queue name should be
@@ -233,33 +227,34 @@ module Resque
   # and converting them into Ruby objects.
   def list_range(key, start = 0, count = 1)
     if count == 1
-      decode redis.lindex(key, start)
+      with_retries do
+        decode redis.lindex(key, start)
+      end
     else
-      Array(redis.lrange(key, start, start+count-1)).map do |item|
-        decode item
+      with_retries do
+        Array(redis.lrange(key, start, start+count-1)).map do |item|
+          decode item
+        end
       end
     end
   end
 
   # Returns an array of all known Resque queues as strings.
   def queues
-    Array(redis.smembers(:queues))
+    with_retries do
+      Array(redis.smembers(:queues))
+    end
   end
 
   # Given a queue name, completely deletes the queue.
   def remove_queue(queue)
-    redis.pipelined do
-      redis.srem(:queues, queue.to_s)
-      redis.del("queue:#{queue}")
+    with_retries do
+      redis.pipelined do
+        redis.srem(:queues, queue.to_s)
+        redis.del("queue:#{queue}")
+      end
     end
   end
-
-  # Used internally to keep track of which queues we've created.
-  # Don't call this directly.
-  def watch_queue(queue)
-    redis.sadd(:queues, queue.to_s)
-  end
-
 
   #
   # job shortcuts
