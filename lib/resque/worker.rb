@@ -22,6 +22,10 @@ module Resque
     # Automatically set if a fork(2) fails.
     attr_accessor :cant_fork
 
+    # When true, makes us treat SIGTERM like SIGQUIT (i.e. marks the worker for
+    # termination, but lets it finish the current job).
+    attr_accessor :graceful_term
+
     attr_writer :to_s
 
     # Returns an array of all worker objects.
@@ -284,14 +288,16 @@ module Resque
 
     # Registers the various signal handlers a worker responds to.
     #
-    # TERM: Shutdown immediately, stop processing jobs.
+    # TERM: Shutdown immediately, stop processing jobs (unless
+    #       `self.graceful_term` is true, in which case only shutdown after the
+    #       current job has finished processing).
     #  INT: Shutdown immediately, stop processing jobs.
     # QUIT: Shutdown after the current job has finished processing.
     # USR1: Kill the forked child immediately, continue processing jobs.
     # USR2: Don't process any new jobs
     # CONT: Start processing jobs again after a USR2
     def register_signal_handlers
-      trap('TERM') { shutdown!  }
+      trap('TERM') { graceful_term ? shutdown : shutdown! }
       trap('INT')  { shutdown!  }
 
       begin
