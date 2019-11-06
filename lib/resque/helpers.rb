@@ -84,19 +84,19 @@ module Resque
       yield
     rescue Redis::TimeoutError => e
       # This exception happens when
-      #  * Redis goes away
+      #  * Redis goes away.
       #  * We failover through a proxy layer.
       #  * Redis accepts connections but does not respond, which can happen
       #    if Redis CPU utilization is high.
-      #
-      # Wait for a random time between 0 and 1 second to prevent thundering reconnect herd
-      sleep rand
-      if retries > 0 && Resque.reconnect(1)
+      if retries > 0
         retries -= 1
-        retry
-      else
-        raise e
+        # Wait for a random time between 0 and 1 second to prevent thundering
+        # reconnect herd
+        sleep rand
+        retry if Resque.reconnect(1)
       end
+
+      raise e
     end
   end
 end
