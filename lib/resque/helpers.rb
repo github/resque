@@ -102,8 +102,8 @@ module Resque
         reconnected = false
         while retry_forever? || retries < max_retries
           if back_off_on_retry?
-            # Wait for a random time plus a jittery exponential backoff to
-            # reduce thundering reconnect herds.
+            # Wait for a jittery exponential backoff to reduce thundering
+            # reconnect herds.
             sleep [2 ** retries + (rand * 5), 60].min
           else
             sleep rand
