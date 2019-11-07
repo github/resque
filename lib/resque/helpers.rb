@@ -82,13 +82,15 @@ module Resque
 
     def with_retries(retries: 3)
       begin
+        connect_retries ||= retries
         yield
       rescue Redis::TimeoutError => e
         # This exception happens when Redis goes
         # away or we failover through a proxy layer.
         # Wait for a random time between 0 and 1 second to prevent thundering reconnect herd
         sleep rand
-        if Resque.reconnect(retries)
+        if retries > 0 && Resque.reconnect(connect_retries)
+          retries -= 1
           retry
         else
           raise e
