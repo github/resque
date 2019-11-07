@@ -260,16 +260,10 @@ context "Resque" do
     assert_equal 8, stats[:pending]
 
     @worker = Resque::Worker.new(:jobs)
-    @worker.register_worker
     2.times { @worker.process }
 
     job = @worker.reserve
     @worker.working_on job
-
-    stats = Resque.info
-    assert_equal 1, stats[:working]
-    assert_equal 1, stats[:workers]
-
     @worker.done_working
 
     stats = Resque.info

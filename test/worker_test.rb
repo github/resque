@@ -180,40 +180,16 @@ context "Resque::Worker" do
     assert_equal 1, Resque::Failure.count
   end
 
-  test "inserts itself into the 'workers' list on startup" do
-    @worker.work(0) do
-      assert_equal @worker, Resque.workers[0]
-    end
-  end
-
-  test "removes itself from the 'workers' list on shutdown" do
-    @worker.work(0) do
-      assert_equal @worker, Resque.workers[0]
-    end
-
-    assert_equal [], Resque.workers
-  end
-
-  test "removes worker with stringified id" do
-    @worker.work(0) do
-      worker_id = Resque.workers[0].to_s
-      Resque.remove_worker(worker_id)
-      assert_equal [], Resque.workers
-    end
-  end
-
   test "records what it is working on" do
     @worker.work(0) do
       task = @worker.job
-      assert_equal({"args"=>[20, "/tmp"], "class"=>"SomeJob"}, task['payload'])
-      assert task['run_at']
-      assert_equal 'jobs', task['queue']
+      assert_equal({"args"=>[20, "/tmp"], "class"=>"SomeJob"}, task.payload)
     end
   end
 
   test "clears its status when not working on anything" do
     @worker.work(0)
-    assert_equal Hash.new, @worker.job
+    assert_nil @worker.job
   end
 
   test "knows when it is working" do
@@ -227,19 +203,6 @@ context "Resque::Worker" do
     assert @worker.idle?
   end
 
-  test "knows who is working" do
-    @worker.work(0) do
-      assert_equal [@worker], Resque.working
-    end
-  end
-
-  test "knows whether it exists or not" do
-    @worker.work(0) do
-      assert Resque::Worker.exists?(@worker)
-      assert !Resque::Worker.exists?('blah-blah')
-    end
-  end
-
   test "sets $0 while working" do
     @worker.work(0) do
       ver = Resque::Version
@@ -247,38 +210,10 @@ context "Resque::Worker" do
     end
   end
 
-  test "can be found" do
-    @worker.work(0) do
-      found = Resque::Worker.find(@worker.to_s)
-      assert_equal @worker.to_s, found.to_s
-      assert found.working?
-      assert_equal @worker.job, found.job
-    end
-  end
-
   test "doesn't find fakes" do
     @worker.work(0) do
       found = Resque::Worker.find('blah-blah')
       assert_equal nil, found
-    end
-  end
-
-  test "cleans up dead worker when requested" do
-    # first we fake out two dead workers
-    workerA = Resque::Worker.new(:jobs)
-    workerA.instance_variable_set(:@to_s, "#{`hostname`.chomp}:1:jobs")
-    workerA.register_worker
-
-    workerB = Resque::Worker.new(:high, :low)
-    workerB.instance_variable_set(:@to_s, "#{`hostname`.chomp}:2:high,low")
-    workerB.register_worker
-
-    assert_equal 2, Resque.workers.size
-
-    # then we prune them
-    @worker.prune_dead_workers
-    @worker.work(0) do
-      assert_equal 1, Resque.workers.size
     end
   end
 

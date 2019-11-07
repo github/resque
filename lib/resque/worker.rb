@@ -30,39 +30,13 @@ module Resque
 
     # Returns an array of all worker objects.
     def self.all
-      with_retries do
-        Array(redis.smembers(:workers)).map { |id| find(id, true) }.compact
-      end
+      []
     end
 
     # Returns an array of all worker objects currently processing
     # jobs.
     def self.working
-      names = all
-      return [] unless names.any?
-
-      names.map! { |name| "worker:#{name}" }
-
-      reportedly_working = {}
-
-      begin
-        with_retries do
-          reportedly_working = redis.mapped_mget(*names).reject do |key, value|
-            value.nil? || value.empty?
-          end
-        end
-      rescue Redis::Distributed::CannotDistribute
-        names.each do |name|
-          with_retries do
-            value = redis.get name
-            reportedly_working[name] = value unless value.nil? || value.empty?
-          end
-        end
-      end
-
-      reportedly_working.keys.map do |key|
-        find(key.sub("worker:", ''), true)
-      end.compact
+      []
     end
 
     # Returns a single worker object. Accepts a string id.
@@ -207,8 +181,8 @@ module Resque
       else
         log "done: #{job.inspect}"
       ensure
-        @current_job = nil
         yield job if block_given?
+        @current_job = nil
       end
     end
 
@@ -271,7 +245,6 @@ module Resque
       enable_gc_optimizations
       register_signal_handlers
       run_hook :before_first_fork, self
-      register_worker
 
       # Fix buffering so we can `rake resque:work > resque.log` and
       # get output from the child in there.
@@ -386,16 +359,6 @@ module Resque
       end
     end
 
-    # Registers ourself as a worker. Useful when entering the worker
-    # lifecycle on startup.
-    def register_worker
-      with_retries do
-        redis.pipelined do
-          redis.sadd(:workers, self)
-          redis.set("worker:#{self}:queues", @queues.join(","))
-        end
-      end
-    end
 
     # Runs a named hook, passing along any arguments.
     def run_hook(name, *args)
@@ -411,51 +374,28 @@ module Resque
     def unregister_worker
       # If we're still processing a job, make sure it gets logged as a
       # failure.
-      if (hash = processing) && !hash.empty?
-        job = Job.new(hash['queue'], hash['payload'])
-        # Ensure the proper worker is attached to this job, even if
-        # it's not the precise instance that died.
+      if (job = @current_job)
         job.worker = self
         job.fail(DirtyExit.new)
-      end
-
-      with_retries do
-        redis.pipelined do
-          redis.srem(:workers, self)
-          redis.del("worker:#{self}")
-          redis.del("worker:#{self}:queues")
-        end
       end
     end
 
     # Given a job, tells Redis we're working on it. Useful for seeing
     # what workers are doing and when.
     def working_on(job)
-      data = encode \
-        :queue   => job.queue,
-        :run_at  => Time.now.utc.iso8601,
-        :payload => job.payload
-      with_retries do
-        redis.set("worker:#{self}", data)
-      end
+      @current_job = job
     end
 
     # Called when we are done working - clears our `working_on` state
     # and tells Redis we processed a job.
     def done_working
-      with_retries do
-        redis.pipelined do
-          Stat << "processed"
-          redis.del("worker:#{self}")
-        end
-      end
+      @current_job = nil
+      Stat << "processed"
     end
 
     # Returns a hash explaining the Job we're currently processing, if any.
     def job
-      with_retries do
-        decode(redis.get("worker:#{self}")) || {}
-      end
+      @current_job
     end
     alias_method :processing, :job
 
@@ -472,9 +412,7 @@ module Resque
     # Returns a symbol representing the current worker state,
     # which can be either :working or :idle
     def state
-      with_retries do
-        redis.exists("worker:#{self}") ? :working : :idle
-      end
+      @current_job ? :working : :idle
     end
 
     # Is this worker the same as another worker?
