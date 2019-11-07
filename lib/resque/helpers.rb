@@ -81,7 +81,7 @@ module Resque
     end
 
     def with_retries(max_retries: 3)
-      retries = max_retries
+      retries = 0
       begin
         yield
       rescue Redis::TimeoutError => e
@@ -90,15 +90,23 @@ module Resque
         #  * We failover through a proxy layer.
         #  * Redis accepts connections but does not respond, which can happen
         #    if Redis CPU utilization is high.
-        while retries > 0
-          retries -= 1
-          # Wait for a random time between 0 and 1 second to prevent thundering
-          # reconnect herd
-          sleep rand
-          retry if Resque.reconnect(1)
+        connected = false
+        while retries < max_retries
+          # Wait for a random time plus an exponetial backoff to reduce
+          # thundering reconnect herds
+          sleep (3 ** retries) + rand
+          retries += 1
+          if Resque.reconnect(1)
+            connected = true
+            break
+          end
         end
 
-        raise e
+        if connected
+          retry
+        else
+          raise e
+        end
       end
     end
   end
