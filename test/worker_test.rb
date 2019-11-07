@@ -381,6 +381,8 @@ context "Resque::Worker" do
   end
 
   test "retries with back-off when experiencing connection issues with Redis" do
+    worker = Resque::Worker.new(:jobs, :more_jobs)
+
     # Simulate multiple Redis timeout errors after the second call to set.
     redis = FakeRedis.new
     set_calls = 0
@@ -393,12 +395,36 @@ context "Resque::Worker" do
       end
     end
 
-    worker = Resque::Worker.new(:jobs, :more_jobs)
     worker.stubs(:redis).returns(redis)
     worker.stubs(:sleep)
 
     worker.work(0)
 
     assert set_calls >= 15
+  end
+
+  test "raises a TimeoutError if the worker is shutdown while retrying Redis operations" do
+    worker = Resque::Worker.new(:jobs, :more_jobs)
+
+    # Simulate multiple Redis timeout errors. Call shutdown on the worker
+    # on the 5th attempt to ensure it will be honored.
+    redis = FakeRedis.new
+    set_calls = 0
+    redis.on_set do
+      set_calls += 1
+      worker.shutdown if set_calls == 5
+      if set_calls > 1
+        raise Redis::TimeoutError
+      else
+        "OK"
+      end
+    end
+
+    worker.stubs(:redis).returns(redis)
+    worker.stubs(:sleep)
+
+    assert_raises Redis::TimeoutError do
+      worker.work(0)
+    end
   end
 end
