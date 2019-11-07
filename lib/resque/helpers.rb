@@ -83,6 +83,7 @@ module Resque
     def with_retries(max_retries: 3)
       retries = 0
       begin
+        connect_retries ||= retries
         yield
       rescue Redis::TimeoutError => e
         # This exception happens when

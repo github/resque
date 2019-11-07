@@ -185,6 +185,14 @@ context "Resque" do
     Resque.redis.unstub(:blpop)
   end
 
+  test "limits retries when popping off items" do
+    Resque.redis.stubs(:blpop).raises(Redis::TimeoutError, "connection reset")
+    assert_raises Redis::TimeoutError do
+      Resque.pop(:people)
+    end
+    Resque.redis.unstub(:blpop)
+  end
+
   test "knows how big a queue is" do
     assert_equal 3, Resque.size(:people)
 
