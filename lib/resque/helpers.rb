@@ -9,7 +9,15 @@ end
 module Resque
   # Methods used by various classes in Resque.
   module Helpers
-    class DecodeException < StandardError; end
+    class DecodeException < StandardError
+      attr_reader :original_object
+
+      def initialize(object, message, backtrace)
+        @original_object = object
+        set_backtrace(backtrace)
+        super(message)
+      end
+    end
 
     # Direct access to the Redis instance.
     def redis
@@ -29,7 +37,7 @@ module Resque
       begin
         ::MultiJson.decode(object)
       rescue ::MultiJson::DecodeError => e
-        raise DecodeException, e.message, e.backtrace
+        raise DecodeException.new(object, e.message, e.backtrace)
       end
     end
 
