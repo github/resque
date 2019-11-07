@@ -186,6 +186,7 @@ context "Resque" do
   end
 
   test "limits retries when popping off items" do
+    Resque.stubs(:sleep)
     Resque.redis.stubs(:blpop).raises(Redis::TimeoutError, "connection reset")
     assert_raises Redis::TimeoutError do
       Resque.pop(:people)
