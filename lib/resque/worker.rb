@@ -177,7 +177,6 @@ module Resque
         rescue Object => e
           log "Received exception when reporting failure: #{e.inspect}"
         end
-        Stat << "failed"
       else
         log "done: #{job.inspect}"
       ensure
@@ -390,7 +389,6 @@ module Resque
     # and tells Redis we processed a job.
     def done_working
       @current_job = nil
-      Stat << "processed"
     end
 
     # Returns a hash explaining the Job we're currently processing, if any.

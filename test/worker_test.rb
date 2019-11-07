@@ -223,11 +223,6 @@ context "Resque::Worker" do
     assert !known_workers.empty?
   end
 
-  test "Processed jobs count" do
-    @worker.work(0)
-    assert_equal 1, Resque.info[:processed]
-  end
-
   test "Will call a before_first_fork hook only once" do
     reset_resque
     $BEFORE_FORK_CALLED = 0
