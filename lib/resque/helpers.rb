@@ -88,7 +88,7 @@ module Resque
       #  * We failover through a proxy layer.
       #  * Redis accepts connections but does not respond, which can happen
       #    if Redis CPU utilization is high.
-      if retries > 0
+      while retries > 0
         retries -= 1
         # Wait for a random time between 0 and 1 second to prevent thundering
         # reconnect herd
