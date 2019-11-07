@@ -107,6 +107,20 @@ module Resque
       validate_queues
     end
 
+    # Configure `with_retries` helper to never fail retrying Redis, but
+    # instead to keep retrying until the worker is explicitly shut down. We
+    # enable exponential back off for these retries, and want to prevent the
+    # worker from failing, because Resqued will just restart it and reset our
+    # exponential back-off back to zero.
+    def retry_forever?
+      !shutdown?
+    end
+
+    # See comment on retry_forever? method above.
+    def back_off_on_retry?
+      true
+    end
+
     # A worker must be given a queue, otherwise it won't know what to
     # do with itself.
     #

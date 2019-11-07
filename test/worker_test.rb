@@ -379,4 +379,26 @@ context "Resque::Worker" do
     worker.work(0)
     assert_equal 1, Resque.size(:jobs)
   end
+
+  test "retries with back-off when experiencing connection issues with Redis" do
+    # Simulate multiple Redis timeout errors after the second call to set.
+    redis = FakeRedis.new
+    set_calls = 0
+    redis.on_set do
+      set_calls += 1
+      if set_calls > 1 && set_calls < 15
+        raise Redis::TimeoutError
+      else
+        "OK"
+      end
+    end
+
+    worker = Resque::Worker.new(:jobs, :more_jobs)
+    worker.stubs(:redis).returns(redis)
+    worker.stubs(:sleep)
+
+    worker.work(0)
+
+    assert set_calls >= 15
+  end
 end

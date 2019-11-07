@@ -166,3 +166,29 @@ class Time
     alias_method :now, :now_with_mock_time
   end
 end
+
+class FakeRedis
+  def get(key)
+  end
+
+  def on_set(&block)
+    @on_set = block
+  end
+
+  def set(key, value)
+    @on_set.call(key, value) if @on_set
+  end
+
+  def srem(key, value)
+  end
+
+  def sadd(key, value)
+  end
+
+  def del(key)
+  end
+
+  def pipelined
+    yield
+  end
+end
