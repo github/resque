@@ -99,7 +99,7 @@ module Resque
         #  * We failover through a proxy layer.
         #  * Redis accepts connections but does not respond, which can happen
         #    if Redis CPU utilization is high.
-        connected = false
+        reconnected = false
         while retry_forever? || retries < max_retries
           if back_off_on_retry?
             # Wait for a random time plus a jittery exponential backoff to
@@ -111,12 +111,12 @@ module Resque
 
           retries += 1
           if Resque.reconnect(1)
-            connected = true
+            reconnected = true
             break
           end
         end
 
-        if connected
+        if reconnected
           retry
         else
           raise e
