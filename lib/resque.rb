@@ -185,7 +185,7 @@ module Resque
   def pop(queues, timeout = 1, retries = 3)
     queue_names = Array(queues).map { |queue| "queue:#{queue}" }
     timeout = [1, timeout].max # require nonzero, no infinite blocking
-    with_retries(max_retries: retries) do
+    with_retries(retries: retries) do
       queue, payload = redis.blpop(*queue_names, timeout)
       queue && [queue.sub("queue:", ""), decode(payload)]
     end
