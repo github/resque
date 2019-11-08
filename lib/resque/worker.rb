@@ -389,7 +389,7 @@ module Resque
     # Registers ourself as a worker. Useful when entering the worker
     # lifecycle on startup.
     def register_worker
-      with_retries do
+      with_exponential_backoff do
         redis.pipelined do
           redis.sadd(:workers, self)
           redis.set("worker:#{self}:queues", @queues.join(","))
@@ -419,7 +419,7 @@ module Resque
         job.fail(DirtyExit.new)
       end
 
-      with_retries do
+      with_exponential_backoff do
         redis.pipelined do
           redis.srem(:workers, self)
           redis.del("worker:#{self}")
@@ -435,7 +435,7 @@ module Resque
         :queue   => job.queue,
         :run_at  => Time.now.utc.iso8601,
         :payload => job.payload
-      with_retries do
+      with_exponential_backoff do
         redis.set("worker:#{self}", data)
       end
     end
@@ -443,7 +443,7 @@ module Resque
     # Called when we are done working - clears our `working_on` state
     # and tells Redis we processed a job.
     def done_working
-      with_retries do
+      with_exponential_backoff do
         redis.pipelined do
           Stat << "processed"
           redis.del("worker:#{self}")
@@ -453,7 +453,7 @@ module Resque
 
     # Returns a hash explaining the Job we're currently processing, if any.
     def job
-      with_retries do
+      with_exponential_backoff do
         decode(redis.get("worker:#{self}")) || {}
       end
     end
@@ -472,7 +472,7 @@ module Resque
     # Returns a symbol representing the current worker state,
     # which can be either :working or :idle
     def state
-      with_retries do
+      with_exponential_backoff do
         redis.exists("worker:#{self}") ? :working : :idle
       end
     end
@@ -543,6 +543,27 @@ module Resque
     def procline(string)
       $0 = "resque-#{Resque::Version}: #{string}"
       log! $0
+    end
+
+    # If a TimeoutError occurs communicating with Redis, retry the operation
+    # with an expontially longer sleep on each attempt. This allows us to
+    # continue working in the event of a Redis failover, but prevents us from
+    # overwhelming Redis if it's having trouble servicing requests due to
+    # high CPU utilization.
+    def with_exponential_backoff
+      retries = 0
+      begin
+        yield
+      rescue Redis::TimeoutError => e
+        while !shutdown?
+          sleep [2 ** retries + (rand * 5), 60].min
+          retries += 1
+          break if Resque.reconnect(1)
+        end
+
+        raise e if shutdown?
+        retry
+      end
     end
 
     # Log a message to STDOUT if we are verbose or very_verbose.

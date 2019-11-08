@@ -80,21 +80,30 @@ module Resque
       constant
     end
 
+    # Retry a limited number of times if we encounter a Redis::TimeoutError.
+    # These errors can happen when:
+    #  * Redis goes away.
+    #  * We failover through a proxy layer.
+    #  * Redis accepts connections but does not respond, which can happen
+    #    if Redis CPU utilization is high.
     def with_retries(retries: 3)
-      begin
-        connect_retries ||= retries
-        yield
-      rescue Redis::TimeoutError => e
-        # This exception happens when Redis goes
-        # away or we failover through a proxy layer.
-        # Wait for a random time between 0 and 1 second to prevent thundering reconnect herd
-        sleep rand
-        if retries > 0 && Resque.reconnect(connect_retries)
-          retries -= 1
-          retry
-        else
-          raise e
+      yield
+    rescue Redis::TimeoutError => e
+      reconnected = false
+      while retries > 0
+        # Wait for a random time to reduce thundering reconnect herds.
+        sleep rand * 3
+        retries -= 1
+        if Resque.reconnect(1)
+          reconnected = true
+          break
         end
+      end
+
+      if reconnected
+        retry
+      else
+        raise e
       end
     end
   end
